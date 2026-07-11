@@ -33,6 +33,35 @@ function deepEqual(a: unknown, b: unknown): boolean {
 }
 
 /**
+ * `ResourceList` is narrowed to the resource types requested at generation
+ * time (see ir/registry.ts), so two generated specs legitimately differ in
+ * it. Merging unions the two narrowings instead of conflicting. Returns
+ * undefined when either side is not the expected oneOf-of-$refs shape.
+ */
+function unionResourceList(existing: unknown, generated: unknown): unknown | undefined {
+  const refsOf = (node: unknown): string[] | undefined => {
+    if (!node || typeof node !== "object" || Array.isArray(node)) return undefined;
+    const oneOf = (node as { oneOf?: unknown }).oneOf;
+    if (!Array.isArray(oneOf)) return undefined;
+    const refs: string[] = [];
+    for (const item of oneOf) {
+      if (!item || typeof item !== "object" || Object.keys(item).length !== 1) return undefined;
+      const ref = (item as { $ref?: unknown }).$ref;
+      if (typeof ref !== "string") return undefined;
+      refs.push(ref);
+    }
+    return refs;
+  };
+  const existingRefs = refsOf(existing);
+  const generatedRefs = refsOf(generated);
+  if (!existingRefs || !generatedRefs) return undefined;
+  return {
+    ...(generated as Record<string, unknown>),
+    oneOf: [...new Set([...existingRefs, ...generatedRefs])].map(($ref) => ({ $ref })),
+  };
+}
+
+/**
  * Merges a generated OpenAPI document into existing YAML text, preserving the
  * existing file's comments, anchors, and key order. Generated entries are
  * added alongside existing content; an existing entry with different content
@@ -112,6 +141,15 @@ export function mergeIntoYaml(
             ? (existing as YAMLMap).toJS(doc)
             : existing;
         if (!deepEqual(existingJs, value)) {
+          if (section === "components" && subsection === "schemas" && key === "ResourceList") {
+            const union = unionResourceList(existingJs, value);
+            if (union !== undefined) {
+              if (!deepEqual(existingJs, union)) {
+                additions.push({ path: [...basePath, key], value: union });
+              }
+              continue;
+            }
+          }
           conflicts.push({ location: [...basePath, key].join(".") });
           if (options.force) additions.push({ path: [...basePath, key], value });
         }

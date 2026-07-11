@@ -15,11 +15,12 @@
  */
 import { execFileSync } from "node:child_process";
 import { gzipSync } from "node:zlib";
+import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
-const ROOT = path.resolve(new URL(".", import.meta.url).pathname, "..");
+const ROOT = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
 const OUT = path.join(ROOT, "definitions");
 
 const SOURCES = {
@@ -142,6 +143,9 @@ function extractMedplum(dir, outDir) {
   for (const file of ["profiles-types.json", "profiles-resources.json"]) {
     const bundle = JSON.parse(fs.readFileSync(path.join(base, file), "utf8"));
     for (const entry of bundle.entry ?? []) {
+      // Medplum's R4 bundles also carry the R4B SubscriptionStatus (topic-based
+      // subscriptions backport, fhirVersion 4.3.0); keep only genuine 4.0.1.
+      if (entry.resource.fhirVersion && entry.resource.fhirVersion !== "4.0.1") continue;
       if (wantStructureDefinition(entry.resource)) {
         sds.push(minimizeStructureDefinition(entry.resource));
         if (entry.resource.kind === "resource") officialResources.push(entry.resource.name);
@@ -171,7 +175,8 @@ function extractFhirCore(dir, outDir) {
 
   const entries = [];
   const sds = [];
-  for (const file of fs.readdirSync(base)) {
+  // Sorted so the output is identical regardless of platform readdir order.
+  for (const file of fs.readdirSync(base).sort()) {
     if (file.startsWith("SearchParameter-") && file.endsWith(".json")) {
       const sp = JSON.parse(fs.readFileSync(path.join(base, file), "utf8"));
       entries.push({ fullUrl: sp.url, resource: sp });
@@ -191,8 +196,13 @@ function extractFhirCore(dir, outDir) {
 for (const [version, { pkg, layout }] of Object.entries(SOURCES)) {
   console.log(`${version}: ${pkg}`);
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), `fhir-defs-${version}-`));
-  const tarball = execFileSync("npm", ["pack", pkg, "--silent", "--pack-destination", tmp], {
+  // npm is npm.cmd on Windows, which can only be spawned through a shell.
+  const isWindows = process.platform === "win32";
+  const tarball = execFileSync(isWindows ? "npm.cmd" : "npm", [
+    "pack", pkg, "--silent", "--pack-destination", tmp,
+  ], {
     encoding: "utf8",
+    shell: isWindows,
   })
     .trim()
     .split("\n")
