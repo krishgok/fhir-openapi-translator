@@ -55,7 +55,12 @@ export function loadSearchParameters(fhirVersion: FhirVersion): SearchParameter[
   };
   return (bundle.entry ?? [])
     .map((e) => e.resource)
-    .filter((r): r is SearchParameter & { resourceType: string } => r?.resourceType === "SearchParameter");
+    .filter(
+      // R4B ships a few draft codesystem-extensions-* SearchParameters with no
+      // `base`; they can't be attached to any resource, so drop them here.
+      (r): r is SearchParameter & { resourceType: string } =>
+        r?.resourceType === "SearchParameter" && Array.isArray(r.base),
+    );
 }
 
 export interface MinElementType {

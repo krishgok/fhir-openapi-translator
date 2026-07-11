@@ -8,6 +8,13 @@ export default tseslint.config(
     },
   },
   {
+    // Tests navigate untyped generated OpenAPI JSON; `any` casts are fine there.
+    files: ["test/**/*.ts"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
+  {
     ignores: ["dist/", "coverage/", "definitions/"],
   },
 );
