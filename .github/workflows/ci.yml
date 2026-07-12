@@ -50,7 +50,8 @@ jobs:
       - name: openapi-generator python
         run: npx -y @openapitools/openapi-generator-cli generate -i /tmp/patient.oas.json -g python -o /tmp/gen-py --skip-validate-spec
       - name: Generated TypeScript compiles
+        # typescript-fetch emits models/ and apis/ at the output root.
         run: |
           cd /tmp/gen-ts
           npm install --no-audit --no-fund typescript@5
-          npx tsc --noEmit --strict false --skipLibCheck --module esnext --moduleResolution bundler --target es2020 $(find src -name '*.ts')
+          npx tsc --noEmit --skipLibCheck --module esnext --moduleResolution bundler --target es2020 $(find . -path ./node_modules -prune -o -name '*.ts' -print)
