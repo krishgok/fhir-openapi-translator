@@ -64,12 +64,43 @@ const mergedYaml = mergeIntoYaml(doc, existingYamlText, { force: false });
 
 See `GenerateOptions` in the type declarations for the full API surface.
 
+## Codegen recipes
+
+Generated specs are exercised against [openapi-generator](https://github.com/OpenAPITools/openapi-generator) in CI (`typescript-fetch` and `python` targets). Notes that matter in practice:
+
+- **typescript-fetch**: pass `--additional-properties=modelPropertyNaming=original`. FHIR represents extensions on primitive fields as sibling `_field` properties; the generator's default naming strips the underscore and produces colliding class members.
+- Large resources produce large model trees (a Patient R4 spec has ~80 schemas, a full Bundle-of-anything far more). If your generator or build struggles, use `--exclude-narrative` and `--max-depth` to shrink the graph.
+- `Bundle.entry.resource` (`ResourceList`) is narrowed to the resource types you requested. If your server returns other types in bundles (e.g. `_include`d resources you didn't generate), either add those resources to the generation, or treat unknown entries as opaque JSON.
+
+## What this is for — and what it is not
+
+**Intended use**
+
+- Codegen typed FHIR models and API clients in languages without a mature FHIR SDK (Go, Rust, Kotlin, PHP, C++, ...).
+- Feed API gateways, contract-testing tools, mock servers, and documentation portals that speak OpenAPI.
+- Commit the generated spec next to your service and regenerate on FHIR version bumps; merge mode keeps hand-written spec content intact.
+
+**Not intended for — do not use this as**
+
+- **A FHIR validator.** Passing schema validation does *not* make a resource FHIR-conformant: FHIRPath invariants, terminology bindings, and profile constraints (slicing, must-support, cardinality refinements) are not represented in OpenAPI. Validate with a real FHIR validator (HAPI, the official validator, server-side `$validate`).
+- **A profile / Implementation Guide tool.** Output describes base resources only; US Core or other IG profiles are not applied.
+- **A replacement for HAPI FHIR or Firely** if you are on Java/.NET — those give you richer, spec-aware models than any OpenAPI codegen can.
+- **XML payload handling.** Only the FHIR JSON representation is modeled.
+
+**Assumptions and known limitations**
+
+- Output is inherently lossy relative to the FHIR specification (see above); it trades fidelity for reach across language ecosystems.
+- Primitive-extension properties (`_field`) are kept for JSON fidelity; they roughly double the property count of each model.
+- Search parameters are typed as strings (except `_count`), because FHIR search values carry prefixes and modifiers (`ge2021-01-01`, `code:below=...`) that stricter types would reject. The FHIR type is preserved in `x-fhir-search-type`.
+- Custom operations (`$everything`, `$validate`, ...), `POST /_search`, batch/transaction semantics, and conditional headers beyond `If-Match` are not modeled.
+- The two definition backends can differ cosmetically (e.g. naming of deeply nested backbone elements, primitive regex patterns); `schema-json` is the default and the reference.
+
 ## Development
 
 ```sh
 npm install
 npm run typecheck
-npm test          # vitest; includes full swagger-parser validation of generated specs
+npm test          # vitest; validates generated specs against the OpenAPI meta-schemas
 npm run build     # tsup → dist/
 ```
 

@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test
+
+  codegen-smoke:
+    # Proves the promise that generated specs work with openapi-generator:
+    # generates a Patient R4 spec, then runs the two most common language
+    # targets against it.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - run: npm ci
+      - run: npm run build
+      - name: Generate Patient R4 spec
+        run: node dist/cli.js generate Patient Observation --fhir-version r4 --format json -o /tmp/patient.oas.json
+      - name: openapi-generator typescript-fetch
+        # modelPropertyNaming=original keeps FHIR's primitive-extension
+        # properties (_status, _use, ...) distinct from their base properties;
+        # the generator's default naming strips the underscore and collides.
+        run: npx -y @openapitools/openapi-generator-cli generate -i /tmp/patient.oas.json -g typescript-fetch -o /tmp/gen-ts --skip-validate-spec --additional-properties=modelPropertyNaming=original
+      - name: openapi-generator python
+        run: npx -y @openapitools/openapi-generator-cli generate -i /tmp/patient.oas.json -g python -o /tmp/gen-py --skip-validate-spec
+      - name: Generated TypeScript compiles
+        run: |
+          cd /tmp/gen-ts
+          npm install --no-audit --no-fund typescript@5
+          npx tsc --noEmit --strict false --skipLibCheck --module esnext --moduleResolution bundler --target es2020 $(find src -name '*.ts')
