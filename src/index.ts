@@ -1,10 +1,12 @@
 export { generateOpenApi, listResources } from "./generate.js";
 export {
+  diffAgainstYaml,
   mergeIntoYaml,
   stringifyDocument,
   MergeConflictError,
   type MergeConflict,
   type MergeOptions,
+  type SpecDiff,
 } from "./merge.js";
 export type {
   FhirVersion,

@@ -77,7 +77,7 @@ export interface MinElement {
   definition?: string;
   contentReference?: string;
   types?: MinElementType[];
-  binding?: { strength: string; valueSet: string };
+  binding?: { strength: string; valueSet: string; codes?: string[] };
 }
 
 export interface MinStructureDefinition {

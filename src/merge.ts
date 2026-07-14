@@ -61,28 +61,27 @@ function unionResourceList(existing: unknown, generated: unknown): unknown | und
   };
 }
 
+interface MergePlan {
+  doc: ReturnType<typeof parseDocument>;
+  conflicts: MergeConflict[];
+  additions: { path: (string | number)[]; value: unknown }[];
+}
+
 /**
- * Merges a generated OpenAPI document into existing YAML text, preserving the
- * existing file's comments, anchors, and key order. Generated entries are
- * added alongside existing content; an existing entry with different content
- * is a conflict (all conflicts are reported; nothing is written unless every
- * conflict is resolved by `force`). Identical entries are left untouched, so
- * re-running the generator is idempotent.
+ * Parses the existing YAML and computes what a merge would do: entries to add
+ * (absent from the file, or ResourceList unions) and conflicting entries
+ * (present with different content). Shared by merge and check.
  */
-export function mergeIntoYaml(
+function computeMergePlan(
   generated: OpenApiDocument,
   existingText: string,
-  options: MergeOptions = {},
-): string {
+  options: MergeOptions,
+): MergePlan {
   const doc = parseDocument(existingText);
   if (doc.errors.length > 0) {
     throw new Error(`Cannot parse existing YAML: ${doc.errors[0]?.message}`);
   }
-  if (doc.contents === null) {
-    // Empty file: treat as a fresh write.
-    return stringifyDocument(generated);
-  }
-  if (!isMap(doc.contents)) {
+  if (doc.contents !== null && !isMap(doc.contents)) {
     throw new Error("Existing file is not a YAML mapping; refusing to merge");
   }
 
@@ -157,14 +156,58 @@ export function mergeIntoYaml(
     }
   }
 
+  return { doc, conflicts, additions };
+}
+
+/**
+ * Merges a generated OpenAPI document into existing YAML text, preserving the
+ * existing file's comments, anchors, and key order. Generated entries are
+ * added alongside existing content; an existing entry with different content
+ * is a conflict (all conflicts are reported; nothing is written unless every
+ * conflict is resolved by `force`). Identical entries are left untouched, so
+ * re-running the generator is idempotent.
+ */
+export function mergeIntoYaml(
+  generated: OpenApiDocument,
+  existingText: string,
+  options: MergeOptions = {},
+): string {
+  const { doc, conflicts, additions } = computeMergePlan(generated, existingText, options);
+  if (doc.contents === null) {
+    // Empty file: treat as a fresh write.
+    return stringifyDocument(generated);
+  }
   if (conflicts.length > 0 && !options.force) {
     throw new MergeConflictError(conflicts);
   }
-
   for (const { path, value } of additions) {
     doc.setIn(path, doc.createNode(value));
   }
   return doc.toString({ lineWidth: 0 });
+}
+
+export interface SpecDiff {
+  /** Entries the file lacks (dot paths), e.g. "components.schemas.Patient". */
+  missing: string[];
+  /** Entries present in the file but differing from generation. */
+  changed: string[];
+  /** True when the file already contains exactly what generation produces. */
+  inSync: boolean;
+}
+
+/**
+ * Compares existing spec text against a generated document without writing
+ * anything — the CI drift guard behind `fhir-oas check`. The file is in sync
+ * when a merge would be a no-op: nothing to add, nothing conflicting.
+ */
+export function diffAgainstYaml(generated: OpenApiDocument, existingText: string): SpecDiff {
+  const { doc, conflicts, additions } = computeMergePlan(generated, existingText, {});
+  if (doc.contents === null) {
+    return { missing: ["(entire document: file is empty)"], changed: [], inSync: false };
+  }
+  const missing = additions.map((a) => a.path.join("."));
+  const changed = conflicts.map((c) => c.location);
+  return { missing, changed, inSync: missing.length === 0 && changed.length === 0 };
 }
 
 /** Serializes a generated document to YAML text. */

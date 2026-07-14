@@ -24,6 +24,13 @@ export interface TrimOptions {
    * dependency closure for codegen targets that struggle with large graphs.
    */
   maxDepth?: number;
+  /**
+   * Replace required-binding enums on code fields with plain strings (the
+   * allowed codes are appended to the description). Codegen'd models then
+   * tolerate servers that return codes outside the strict ValueSet — a common
+   * reality with legacy data. `resourceType` discriminators keep their enum.
+   */
+  noEnums?: boolean;
 }
 
 export interface GenerateOptions {

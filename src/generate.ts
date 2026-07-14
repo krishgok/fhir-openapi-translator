@@ -72,8 +72,9 @@ export function generateOpenApi(options: GenerateOptions): OpenApiDocument {
   const { schemas } = extractClosure(registry, roots, options.trim ?? {}, roots);
 
   const componentSchemas: Record<string, JsonSchemaNode> = {};
+  const convertOptions = { noEnums: options.trim?.noEnums };
   for (const name of [...schemas.keys()].sort()) {
-    componentSchemas[name] = convertSchema(schemas.get(name)!, openApiVersion);
+    componentSchemas[name] = convertSchema(schemas.get(name)!, openApiVersion, convertOptions);
   }
 
   const paths: Record<string, JsonSchemaNode> = {};

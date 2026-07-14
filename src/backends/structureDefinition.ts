@@ -245,12 +245,12 @@ function schemaForTypeCode(
     return { schema: { $ref: "#/definitions/ResourceList" }, primitive: false };
   }
   const primitive = code.charAt(0) === code.charAt(0).toLowerCase();
-  const schema: JsonSchemaNode = { $ref: `#/definitions/${code}` };
-  if (el.binding && primitive && (code === "code" || code === "string" || code === "uri")) {
-    // Required bindings on codes could become enums; kept as refs for parity
-    // with fhir.schema.json, which only inlines enums it can fully resolve.
+  // Required bindings whose ValueSet was resolved at vendor time become
+  // inline enums on `code` elements, mirroring the official fhir.schema.json.
+  if (code === "code" && el.binding?.codes?.length) {
+    return { schema: { enum: el.binding.codes }, primitive: true };
   }
-  return { schema, primitive };
+  return { schema: { $ref: `#/definitions/${code}` }, primitive };
 }
 
 function wrapCardinality(

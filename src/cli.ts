@@ -2,8 +2,8 @@
 import { Command, Option } from "commander";
 import fs from "node:fs";
 import { generateOpenApi, listResources } from "./generate.js";
-import { MergeConflictError, mergeIntoYaml, stringifyDocument } from "./merge.js";
-import type { FhirVersion, OpenApiVersion, SourceBackend } from "./types.js";
+import { diffAgainstYaml, MergeConflictError, mergeIntoYaml, stringifyDocument } from "./merge.js";
+import type { FhirVersion, GenerateOptions, OpenApiVersion, SourceBackend } from "./types.js";
 
 const program = new Command();
 
@@ -13,28 +13,80 @@ program
     "Generate OpenAPI specifications for HL7 FHIR resources, for model codegen in any language.",
   );
 
-const fhirVersionOption = new Option("-f, --fhir-version <version>", "FHIR version")
-  .choices(["r4", "r4b", "r5"])
-  .makeOptionMandatory();
+const fhirVersionOption = () =>
+  new Option("-f, --fhir-version <version>", "FHIR version")
+    .choices(["r4", "r4b", "r5"])
+    .makeOptionMandatory();
 
-const sourceOption = new Option(
-  "-s, --source <backend>",
-  "definition source backend",
+const sourceOption = () =>
+  new Option("-s, --source <backend>", "definition source backend")
+    .choices(["schema-json", "structure-def"])
+    .default("schema-json");
+
+/** Options that shape the generated document, shared by generate and check. */
+function addGenerationOptions(command: Command): Command {
+  return command
+    .addOption(fhirVersionOption())
+    .addOption(
+      new Option("--openapi-version <version>", "target OpenAPI version")
+        .choices(["3.0", "3.0.3", "3.1", "3.1.0"])
+        .default("3.0.3"),
+    )
+    .addOption(sourceOption())
+    .option("--base-url <url>", "server base URL to embed in the spec")
+    .option("--title <title>", "override the generated info.title")
+    .option("--exclude-narrative", "replace the Narrative type with a generic object", false)
+    .option(
+      "--no-enums",
+      "replace required-binding enums with plain strings (codes noted in descriptions)",
+    )
+    .option(
+      "--max-depth <n>",
+      "stub schema definitions deeper than n hops from the requested resources",
+      (value) => Number.parseInt(value, 10),
+    );
+}
+
+interface SharedCliOptions {
+  fhirVersion: string;
+  openapiVersion: string;
+  source: string;
+  baseUrl?: string;
+  title?: string;
+  excludeNarrative: boolean;
+  /** commander maps --no-enums here: undefined/true = keep, false = strip. */
+  enums?: boolean;
+  maxDepth?: number;
+}
+
+function toGenerateOptions(resources: string[], opts: SharedCliOptions): GenerateOptions {
+  if (opts.maxDepth !== undefined && (!Number.isInteger(opts.maxDepth) || opts.maxDepth < 0)) {
+    throw new Error("--max-depth must be a non-negative integer");
+  }
+  const openApiVersion: OpenApiVersion = opts.openapiVersion.startsWith("3.1")
+    ? "3.1.0"
+    : "3.0.3";
+  return {
+    resources,
+    fhirVersion: opts.fhirVersion as FhirVersion,
+    openApiVersion,
+    source: opts.source as SourceBackend,
+    baseUrl: opts.baseUrl,
+    title: opts.title,
+    trim: {
+      excludeNarrative: opts.excludeNarrative,
+      maxDepth: opts.maxDepth,
+      noEnums: opts.enums === false,
+    },
+  };
+}
+
+addGenerationOptions(
+  program
+    .command("generate")
+    .description("Generate an OpenAPI spec for one or more FHIR resources")
+    .argument("<resources...>", 'FHIR resource names, e.g. "Patient Observation"'),
 )
-  .choices(["schema-json", "structure-def"])
-  .default("schema-json");
-
-program
-  .command("generate")
-  .description("Generate an OpenAPI spec for one or more FHIR resources")
-  .argument("<resources...>", 'FHIR resource names, e.g. "Patient Observation"')
-  .addOption(fhirVersionOption)
-  .addOption(
-    new Option("--openapi-version <version>", "target OpenAPI version")
-      .choices(["3.0", "3.0.3", "3.1", "3.1.0"])
-      .default("3.0.3"),
-  )
-  .addOption(sourceOption)
   .option("-o, --output <file>", "write a new spec file (YAML unless --format json)")
   .option("--merge-into <file>", "merge into an existing YAML spec file")
   .option("--force", "overwrite conflicting entries when merging", false)
@@ -43,38 +95,12 @@ program
       .choices(["yaml", "json"])
       .default("yaml"),
   )
-  .option("--base-url <url>", "server base URL to embed in the spec")
-  .option("--title <title>", "override the generated info.title")
-  .option("--exclude-narrative", "replace the Narrative type with a generic object", false)
-  .option(
-    "--max-depth <n>",
-    "stub schema definitions deeper than n hops from the requested resources",
-    (value) => Number.parseInt(value, 10),
-  )
   .action((resources: string[], opts) => {
     try {
       if (opts.output && opts.mergeInto) {
         throw new Error("Use either --output or --merge-into, not both");
       }
-      if (opts.maxDepth !== undefined && (!Number.isInteger(opts.maxDepth) || opts.maxDepth < 0)) {
-        throw new Error("--max-depth must be a non-negative integer");
-      }
-      const openApiVersion: OpenApiVersion = opts.openapiVersion.startsWith("3.1")
-        ? "3.1.0"
-        : "3.0.3";
-
-      const document = generateOpenApi({
-        resources,
-        fhirVersion: opts.fhirVersion as FhirVersion,
-        openApiVersion,
-        source: opts.source as SourceBackend,
-        baseUrl: opts.baseUrl,
-        title: opts.title,
-        trim: {
-          excludeNarrative: opts.excludeNarrative,
-          maxDepth: opts.maxDepth,
-        },
-      });
+      const document = generateOpenApi(toGenerateOptions(resources, opts));
 
       if (opts.mergeInto) {
         const existing = fs.existsSync(opts.mergeInto)
@@ -101,11 +127,44 @@ program
     }
   });
 
+addGenerationOptions(
+  program
+    .command("check")
+    .description(
+      "Verify that a committed spec file is in sync with what generation would produce (CI drift guard)",
+    )
+    .argument("<resources...>", "FHIR resource names the spec should cover"),
+)
+  .requiredOption("--file <file>", "spec file (YAML or JSON) to check")
+  .action((resources: string[], opts) => {
+    try {
+      if (!fs.existsSync(opts.file)) {
+        throw new Error(`No such file: ${opts.file}`);
+      }
+      const document = generateOpenApi(toGenerateOptions(resources, opts));
+      const diff = diffAgainstYaml(document, fs.readFileSync(opts.file, "utf8"));
+      if (diff.inSync) {
+        console.log(`${opts.file} is in sync`);
+        return;
+      }
+      console.error(`${opts.file} is out of sync with generation:`);
+      for (const location of diff.missing) console.error(`  missing: ${location}`);
+      for (const location of diff.changed) console.error(`  changed: ${location}`);
+      console.error(
+        `Regenerate with: fhir-oas generate ${resources.join(" ")} --fhir-version ${opts.fhirVersion} --merge-into ${opts.file}` +
+          (diff.changed.length > 0 ? " --force" : ""),
+      );
+      process.exit(1);
+    } catch (error) {
+      fail(error);
+    }
+  });
+
 program
   .command("list")
   .description("List the FHIR resource types available for a FHIR version")
-  .addOption(fhirVersionOption)
-  .addOption(sourceOption)
+  .addOption(fhirVersionOption())
+  .addOption(sourceOption())
   .action((opts) => {
     try {
       for (const name of listResources(opts.fhirVersion as FhirVersion, opts.source)) {
