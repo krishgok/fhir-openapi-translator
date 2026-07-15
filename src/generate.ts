@@ -2,6 +2,7 @@ import { buildRegistryFromSchemaJson } from "./backends/schemaJson.js";
 import { buildRegistryFromStructureDefinitions } from "./backends/structureDefinition.js";
 import { convertSchema } from "./emit/schema.js";
 import { extractClosure, type DefinitionRegistry } from "./ir/registry.js";
+import { buildOperationPaths } from "./operations.js";
 import { buildResourcePaths, commonSearchParameterComponents } from "./paths.js";
 import {
   FHIR_VERSION_NUMBERS,
@@ -66,9 +67,20 @@ export function generateOpenApi(options: GenerateOptions): OpenApiDocument {
   const registry = buildRegistry(options.fhirVersion, options.source ?? "schema-json");
   const resources = [...new Set(options.resources.map((r) => resolveResourceName(registry, r)))];
 
+  const operationPaths: Record<string, JsonSchemaNode> = {};
+  const operationRoots: string[] = [];
+  if (options.operations) {
+    const knownResources = new Set(registry.resourceNames);
+    for (const resource of resources) {
+      const result = buildOperationPaths(options.fhirVersion, resource, knownResources);
+      Object.assign(operationPaths, result.paths);
+      operationRoots.push(...result.extraSchemaRoots);
+    }
+  }
+
   // Bundle and OperationOutcome are always present: search/history responses
   // are Bundles and every error response is an OperationOutcome.
-  const roots = [...new Set([...resources, "Bundle", "OperationOutcome"])];
+  const roots = [...new Set([...resources, "Bundle", "OperationOutcome", ...operationRoots])];
   const { schemas } = extractClosure(registry, roots, options.trim ?? {}, roots);
 
   const componentSchemas: Record<string, JsonSchemaNode> = {};
@@ -81,6 +93,7 @@ export function generateOpenApi(options: GenerateOptions): OpenApiDocument {
   for (const resource of resources) {
     Object.assign(paths, buildResourcePaths(options.fhirVersion, resource));
   }
+  Object.assign(paths, operationPaths);
 
   const fhirNumber = FHIR_VERSION_NUMBERS[options.fhirVersion];
   const document: OpenApiDocument = {

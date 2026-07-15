@@ -41,7 +41,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - name: Generate Patient R4 spec
-        run: node dist/cli.js generate Patient Observation --fhir-version r4 --format json -o /tmp/patient.oas.json
+        run: node dist/cli.js generate Patient Observation --fhir-version r4 --operations --format json -o /tmp/patient.oas.json
       - name: openapi-generator typescript-fetch
         # modelPropertyNaming=original keeps FHIR's primitive-extension
         # properties (_status, _use, ...) distinct from their base properties;

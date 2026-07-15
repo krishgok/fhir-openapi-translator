@@ -35,6 +35,11 @@ function addGenerationOptions(command: Command): Command {
     .addOption(sourceOption())
     .option("--base-url <url>", "server base URL to embed in the spec")
     .option("--title <title>", "override the generated info.title")
+    .option(
+      "--operations",
+      "include the standard FHIR operations ($everything, $validate, ...) for the requested resources",
+      false,
+    )
     .option("--exclude-narrative", "replace the Narrative type with a generic object", false)
     .option(
       "--no-enums",
@@ -53,6 +58,7 @@ interface SharedCliOptions {
   source: string;
   baseUrl?: string;
   title?: string;
+  operations: boolean;
   excludeNarrative: boolean;
   /** commander maps --no-enums here: undefined/true = keep, false = strip. */
   enums?: boolean;
@@ -71,6 +77,7 @@ function toGenerateOptions(resources: string[], opts: SharedCliOptions): Generat
     fhirVersion: opts.fhirVersion as FhirVersion,
     openApiVersion,
     source: opts.source as SourceBackend,
+    operations: opts.operations,
     baseUrl: opts.baseUrl,
     title: opts.title,
     trim: {

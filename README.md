@@ -13,6 +13,7 @@ Ask for `Patient` and you get a self-contained OpenAPI document with the Patient
 - **Two definition backends** — the official `fhir.schema.json` (default) or FHIR StructureDefinitions.
 - **Typed code enums** — required-binding ValueSets become string enums in both backends (`Observation.status` codegens as an enum, not a bare string); `--no-enums` swaps them for lenient plain strings when servers return out-of-ValueSet legacy codes.
 - **Drift guard** — `fhir-oas check` verifies in CI that a committed spec still matches what generation would produce, and says how to fix it when it doesn't.
+- **FHIR operations** — `--operations` adds the standard operations for the requested resources (`$everything`, `$validate`, `$meta`, ...) from the official OperationDefinitions: GET with query parameters when all inputs are primitive, otherwise POST with a `Parameters` body.
 - **Trim options** — stub out the `Narrative` type or cap the dependency-closure depth for codegen targets that struggle with large schema graphs.
 
 ## Install
@@ -47,6 +48,9 @@ fhir-oas check Patient Observation -f r4 --file api.yaml
 
 # Lenient models: replace binding enums with plain strings
 fhir-oas generate Patient -f r4 --no-enums
+
+# Include the standard operations (GET /Patient/{id}/$everything, POST /Patient/$validate, ...)
+fhir-oas generate Patient -f r4 --operations
 ```
 
 `fhir-oas generate --help` shows all options, including `--source` (definition backend), `--title`, and `--force` (overwrite conflicting entries when merging).
@@ -101,7 +105,7 @@ Generated specs are exercised against [openapi-generator](https://github.com/Ope
 - Enums cover *required* bindings whose ValueSet expands to a bounded code list (≤150 codes, no filters); extensible/preferred bindings and open code systems (BCP-47 languages, MIME types) stay plain strings by design.
 - Primitive-extension properties (`_field`) are kept for JSON fidelity; they roughly double the property count of each model.
 - Search parameters are typed as strings (except `_count`), because FHIR search values carry prefixes and modifiers (`ge2021-01-01`, `code:below=...`) that stricter types would reject. The FHIR type is preserved in `x-fhir-search-type`.
-- Custom operations (`$everything`, `$validate`, ...), `POST /_search`, batch/transaction semantics, and conditional headers beyond `If-Match` are not modeled.
+- Operations are resource-scoped only: system-level operations (`GET /$export`-style, `$convert`, ...), `POST /_search`, batch/transaction semantics, and conditional headers beyond `If-Match` are not modeled. Multi-part operation parameters collapse to a generic `Parameters` body.
 - The two definition backends can differ cosmetically (e.g. naming of deeply nested backbone elements, primitive regex patterns); `schema-json` is the default and the reference.
 
 ## Development

@@ -41,6 +41,12 @@ export interface GenerateOptions {
   openApiVersion?: OpenApiVersion;
   /** Definition source backend. Default: "schema-json". */
   source?: SourceBackend;
+  /**
+   * Also emit the standard FHIR operations applicable to the requested
+   * resources ($everything, $validate, ...) from the official
+   * OperationDefinitions. Default: false.
+   */
+  operations?: boolean;
   /** Server base URL for the `servers` entry. Omitted when not given. */
   baseUrl?: string;
   /** Override the generated `info.title`. */

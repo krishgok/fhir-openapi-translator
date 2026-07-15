@@ -59,4 +59,18 @@ describe("generated specs validate against the OpenAPI meta-schema", () => {
       }
     }
   }
+
+  for (const fhirVersion of FHIR_VERSIONS) {
+    it(`${fhirVersion} with operations`, async () => {
+      const doc = generateOpenApi({
+        resources: ["Patient", "Observation"],
+        fhirVersion,
+        operations: true,
+      });
+      const result = await new Validator().validate(structuredClone(doc));
+      expect(result.errors, JSON.stringify(result.errors ?? null).slice(0, 2000)).toBeUndefined();
+      expect(result.valid).toBe(true);
+      expectRefsResolve(doc);
+    });
+  }
 });
