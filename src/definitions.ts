@@ -63,6 +63,33 @@ export function loadSearchParameters(fhirVersion: FhirVersion): SearchParameter[
     );
 }
 
+export interface MinOperationParameter {
+  name: string;
+  use: "in" | "out";
+  min: number;
+  max: string;
+  /** Absent for multi-part parameters (they force POST + Parameters). */
+  type?: string;
+  documentation?: string;
+}
+
+export interface MinOperationDefinition {
+  name: string;
+  code: string;
+  url: string;
+  description?: string;
+  /** Applicable resource types; ["Resource"] means every resource. */
+  resource: string[];
+  system: boolean;
+  type: boolean;
+  instance: boolean;
+  parameters: MinOperationParameter[];
+}
+
+export function loadOperationDefinitions(fhirVersion: FhirVersion): MinOperationDefinition[] {
+  return loadGzJson(fhirVersion, "operation-definitions.json") as MinOperationDefinition[];
+}
+
 export interface MinElementType {
   code: string;
   targetProfile?: string[];

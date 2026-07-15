@@ -121,6 +121,28 @@ function minimizeStructureDefinition(sd, resolveValueSet) {
   };
 }
 
+function minimizeOperationDefinition(op) {
+  return {
+    name: op.name,
+    code: op.code,
+    url: op.url,
+    ...(op.description ? { description: op.description } : {}),
+    resource: op.resource ?? [],
+    system: !!op.system,
+    type: !!op.type,
+    instance: !!op.instance,
+    parameters: (op.parameter ?? []).map((p) => ({
+      name: p.name,
+      use: p.use,
+      min: p.min,
+      max: p.max,
+      // Multi-part parameters have no type; they force POST + Parameters.
+      ...(p.type ? { type: p.type } : {}),
+      ...(p.documentation ? { documentation: p.documentation } : {}),
+    })),
+  };
+}
+
 function wantStructureDefinition(sd) {
   return (
     sd.resourceType === "StructureDefinition" &&
@@ -203,6 +225,7 @@ function extractMedplum(dir, outDir) {
   const resolveValueSet = buildValueSetResolver(terminology);
 
   const sds = [];
+  const ops = [];
   const officialResources = [];
   for (const file of ["profiles-types.json", "profiles-resources.json"]) {
     const bundle = JSON.parse(fs.readFileSync(path.join(base, file), "utf8"));
@@ -213,10 +236,14 @@ function extractMedplum(dir, outDir) {
       if (wantStructureDefinition(entry.resource)) {
         sds.push(minimizeStructureDefinition(entry.resource, resolveValueSet));
         if (entry.resource.kind === "resource") officialResources.push(entry.resource.name);
+      } else if (entry.resource.resourceType === "OperationDefinition") {
+        ops.push(minimizeOperationDefinition(entry.resource));
       }
     }
   }
   writeGz(path.join(outDir, "structure-definitions.json.gz"), sds);
+  ops.sort((a, b) => a.url.localeCompare(b.url));
+  writeGz(path.join(outDir, "operation-definitions.json.gz"), ops);
 
   const schema = JSON.parse(fs.readFileSync(path.join(base, "fhir.schema.json"), "utf8"));
   writeGz(
@@ -240,6 +267,7 @@ function extractFhirCore(dir, outDir) {
   const terminology = [];
   const sdFiles = [];
   const entries = [];
+  const ops = [];
   // Sorted so the output is identical regardless of platform readdir order.
   for (const file of fs.readdirSync(base).sort()) {
     if (!file.endsWith(".json")) continue;
@@ -250,9 +278,13 @@ function extractFhirCore(dir, outDir) {
       sdFiles.push(file);
     } else if (file.startsWith("ValueSet-") || file.startsWith("CodeSystem-")) {
       terminology.push(JSON.parse(fs.readFileSync(path.join(base, file), "utf8")));
+    } else if (file.startsWith("OperationDefinition-")) {
+      ops.push(minimizeOperationDefinition(JSON.parse(fs.readFileSync(path.join(base, file), "utf8"))));
     }
   }
   const resolveValueSet = buildValueSetResolver(terminology);
+  ops.sort((a, b) => a.url.localeCompare(b.url));
+  writeGz(path.join(outDir, "operation-definitions.json.gz"), ops);
 
   const sds = [];
   for (const file of sdFiles) {
