@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import {
+  diffAgainstYaml,
   generateOpenApi,
   mergeIntoYaml,
   stringifyDocument,
@@ -71,6 +72,26 @@ describe("mergeIntoYaml", () => {
       openApiVersion: "3.1.0",
     });
     expect(() => mergeIntoYaml(v31, existing)).toThrow(/OpenAPI version mismatch/);
+  });
+
+  it("diffAgainstYaml reports in-sync, missing, and changed states", () => {
+    const existing = stringifyDocument(patient());
+
+    expect(diffAgainstYaml(patient(), existing).inSync).toBe(true);
+
+    const withObservation = diffAgainstYaml(observation(), existing);
+    expect(withObservation.inSync).toBe(false);
+    expect(withObservation.missing).toContain("components.schemas.Observation");
+    expect(withObservation.missing).toContain("paths./Observation");
+    expect(withObservation.changed).toEqual([]);
+
+    const conflicting = patient();
+    (conflicting.components as any).schemas.Patient = { type: "object" };
+    const drifted = diffAgainstYaml(conflicting, existing);
+    expect(drifted.inSync).toBe(false);
+    expect(drifted.changed).toEqual(["components.schemas.Patient"]);
+
+    expect(diffAgainstYaml(patient(), "").inSync).toBe(false);
   });
 
   it("keeps existing info/servers over generated ones", () => {

@@ -67,6 +67,28 @@ describe("fhir-oas CLI (requires `npm run build`)", () => {
     expect(forced.components.schemas.Narrative.type).toBe("object");
   });
 
+  it("check passes on an in-sync file and fails on drift", () => {
+    const out = tmpFile("checked.yaml");
+    run(["generate", "Patient", "--fhir-version", "r4", "-o", out]);
+
+    const inSync = run(["check", "Patient", "--fhir-version", "r4", "--file", out]);
+    expect(inSync.code).toBe(0);
+
+    // Same file no longer covers Observation -> drift.
+    const drift = run(
+      ["check", "Patient", "Observation", "--fhir-version", "r4", "--file", out],
+      true,
+    );
+    expect(drift.code).toBe(1);
+  });
+
+  it("generate --no-enums strips binding enums", () => {
+    const { stdout } = run(["generate", "Patient", "--fhir-version", "r4", "--no-enums"]);
+    const doc = parse(stdout);
+    expect(doc.components.schemas.Patient.properties.gender.enum).toBeUndefined();
+    expect(doc.components.schemas.Patient.properties.resourceType.enum).toEqual(["Patient"]);
+  });
+
   it("lists resources", () => {
     const { stdout } = run(["list", "--fhir-version", "r4b"]);
     expect(stdout.split("\n")).toContain("Patient");
