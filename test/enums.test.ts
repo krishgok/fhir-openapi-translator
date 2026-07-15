@@ -43,21 +43,24 @@ describe("required-binding enums", () => {
     expect(gender.description).toContain("male | female | other | unknown");
   });
 
-  it("--no-enums keeps the resourceType discriminator enum", () => {
-    const doc = generateOpenApi({
+  it("--no-enums keeps the resourceType discriminator in both OpenAPI versions", () => {
+    // resourceType comes from a JSON Schema `const`, not a binding enum, so
+    // --no-enums must not touch it. Its representation differs by target:
+    // OpenAPI 3.0.3 downconverts const to a single-value enum, 3.1.0 keeps const.
+    const doc303 = generateOpenApi({
       resources: ["Patient"],
       fhirVersion: "r4",
       trim: { noEnums: true },
     }) as any;
-    expect(doc.components.schemas.Patient.properties.resourceType.enum).toEqual(["Patient"]);
+    expect(doc303.components.schemas.Patient.properties.resourceType.enum).toEqual(["Patient"]);
 
-    const doc31 = generateOpenApi({
+    const doc310 = generateOpenApi({
       resources: ["Patient"],
       fhirVersion: "r4",
       openApiVersion: "3.1.0",
       trim: { noEnums: true },
     }) as any;
-    expect(doc31.components.schemas.Patient.properties.resourceType.const).toBe("Patient");
+    expect(doc310.components.schemas.Patient.properties.resourceType.const).toBe("Patient");
   });
 
   it("unresolvable bindings stay plain code refs (no invented enums)", () => {
