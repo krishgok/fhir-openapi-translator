@@ -14,6 +14,7 @@ Ask for `Patient` and you get a self-contained OpenAPI document with the Patient
 - **Typed code enums** — required-binding ValueSets become string enums in both backends (`Observation.status` codegens as an enum, not a bare string); `--no-enums` swaps them for lenient plain strings when servers return out-of-ValueSet legacy codes.
 - **Drift guard** — `fhir-oas check` verifies in CI that a committed spec still matches what generation would produce, and says how to fix it when it doesn't.
 - **FHIR operations** — `--operations` adds the standard operations for the requested resources (`$everything`, `$validate`, `$meta`, ...) from the official OperationDefinitions: GET with query parameters when all inputs are primitive, otherwise POST with a `Parameters` body.
+- **Profiles / Implementation Guides** — `--ig <package> --profile <id>` applies a profile (e.g. US Core Patient) from an IG package to its base resource: tightened cardinalities become `required`, removed elements (`max: 0`) are dropped, fixed values become `const`, and required bindings resolve to enums. The profiled schema is named after the profile (`USCorePatient`) and referenced from the base `/Patient` paths.
 - **Trim options** — stub out the `Narrative` type or cap the dependency-closure depth for codegen targets that struggle with large schema graphs.
 
 ## Install
@@ -51,6 +52,13 @@ fhir-oas generate Patient -f r4 --no-enums
 
 # Include the standard operations (GET /Patient/{id}/$everything, POST /Patient/$validate, ...)
 fhir-oas generate Patient -f r4 --operations
+
+# Apply a profile from an Implementation Guide package
+fhir-oas generate Patient -f r4 --ig ./hl7.fhir.us.core-5.0.1.tgz --profile us-core-patient
+fhir-oas generate Patient -f r4 --ig hl7.fhir.us.core@5.0.1 --profile us-core-patient  # fetched + cached
+
+# List the profiles in an IG package
+fhir-oas list --ig ./hl7.fhir.us.core-5.0.1.tgz
 ```
 
 `fhir-oas generate --help` shows all options, including `--source` (definition backend), `--title`, and `--force` (overwrite conflicting entries when merging).
@@ -74,6 +82,20 @@ listResources("r5");             // ["Account", "ActivityDefinition", ...]
 const mergedYaml = mergeIntoYaml(doc, existingYamlText, { force: false });
 ```
 
+Profiles from an IG package (`loadIg` is async for registry coordinates; a local path can be passed to `ig` directly):
+
+```ts
+import { generateOpenApi, loadIg } from "fhir-openapi-translator";
+
+const ig = await loadIg("hl7.fhir.us.core@5.0.1");   // or "./us-core.tgz", or a directory
+const doc = generateOpenApi({
+  resources: ["Patient"],
+  fhirVersion: "r4",
+  ig,                                // or ig: "./us-core.tgz" (loaded synchronously)
+  profiles: ["us-core-patient"],
+});
+```
+
 See `GenerateOptions` in the type declarations for the full API surface.
 
 ## Codegen recipes
@@ -94,10 +116,26 @@ Generated specs are exercised against [openapi-generator](https://github.com/Ope
 
 **Not intended for — do not use this as**
 
-- **A FHIR validator.** Passing schema validation does *not* make a resource FHIR-conformant: FHIRPath invariants, terminology bindings, and profile constraints (slicing, must-support, cardinality refinements) are not represented in OpenAPI. Validate with a real FHIR validator (HAPI, the official validator, server-side `$validate`).
-- **A profile / Implementation Guide tool.** Output describes base resources only; US Core or other IG profiles are not applied.
+- **A FHIR validator.** Passing schema validation does *not* make a resource FHIR-conformant: FHIRPath invariants, terminology bindings, and profile constraints (slicing, must-support, cardinality refinements) are not fully represented in OpenAPI. Validate with a real FHIR validator (HAPI, the official validator, server-side `$validate`).
+- **A full profile / conformance engine.** `--profile` applies the *representable* profile constraints (see the table below), but slicing, extension slices, `pattern[x]`, FHIRPath invariants, and must-support are **not enforced** — they are surfaced as description notes and `x-fhir-constraints-omitted`, not as schema rules.
 - **A replacement for HAPI FHIR or Firely** if you are on Java/.NET — those give you richer, spec-aware models than any OpenAPI codegen can.
 - **XML payload handling.** Only the FHIR JSON representation is modeled.
+
+**Profiles: what `--profile` applies**
+
+Given `--ig <package> --profile <id>`, the profile snapshot is turned into a schema named after the profile (`USCorePatient`), referenced from the base `/Patient` paths:
+
+| Profile constraint | Schema effect |
+|---|---|
+| `min ≥ 1` | property becomes `required` |
+| `max: "0"` | property omitted |
+| `max: "1"` on a base array | scalar instead of array |
+| required binding, resolvable ValueSet (IG-local, then vendored core; ≤150 codes) | inline `enum` |
+| `fixed[x]` | `const` (3.1) / single-value `enum` (3.0.3) |
+| choice-type narrowing | only the permitted `value[x]` expansions emitted |
+| `pattern[x]`, slicing, invariants, must-support | *not enforced* — noted in `description` + `x-fhir-constraints-omitted` |
+
+The IG package is a local `.tgz` / unpacked directory, or a `name@version` coordinate fetched from `packages.fhir.org` and cached under `~/.fhir-oas/packages`. Profiles must ship a snapshot (differential-only packages error); the package FHIR version must match `--fhir-version`; only the public registry is supported (no auth).
 
 **Assumptions and known limitations**
 

@@ -1,4 +1,5 @@
 export { generateOpenApi, listResources } from "./generate.js";
+export { loadIg, loadIgSync, type IgContext, type IgProfile } from "./ig/package.js";
 export {
   diffAgainstYaml,
   mergeIntoYaml,
@@ -11,6 +12,7 @@ export {
 export type {
   FhirVersion,
   GenerateOptions,
+  IgContextLike,
   OpenApiDocument,
   OpenApiVersion,
   SourceBackend,

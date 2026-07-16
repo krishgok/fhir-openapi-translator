@@ -54,6 +54,8 @@ export function buildOperationPaths(
   fhirVersion: FhirVersion,
   resource: string,
   knownResources: ReadonlySet<string>,
+  /** Maps a resource type to the schema name to reference (profile-aware). */
+  schemaFor: (resourceType: string) => string = (r) => r,
 ): OperationPathsResult {
   const paths: Record<string, JsonSchemaNode> = {};
   const extraSchemaRoots = new Set<string>();
@@ -67,7 +69,7 @@ export function buildOperationPaths(
   for (const op of applicable) {
     const inParams = op.parameters.filter((p) => p.use === "in");
     const useGet = inParams.every((p) => isPrimitive(p.type));
-    const responseSchema = responseSchemaName(op, knownResources);
+    const responseSchema = schemaFor(responseSchemaName(op, knownResources));
     extraSchemaRoots.add(responseSchema);
     if (!useGet) extraSchemaRoots.add("Parameters");
 

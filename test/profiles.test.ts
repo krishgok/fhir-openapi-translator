@@ -1,0 +1,205 @@
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { Validator } from "@seriousme/openapi-schema-validator";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { generateOpenApi, loadIg, loadIgSync } from "../src/index.js";
+import { applyProfile, buildCoreValueSetFallback } from "../src/ig/profile.js";
+import { buildRegistryFromStructureDefinitions } from "../src/backends/structureDefinition.js";
+import { emitStructureDefinitionSchemas } from "../src/ir/structureWalker.js";
+import type { MinStructureDefinition } from "../src/definitions.js";
+
+const IG_DIR = path.resolve(__dirname, "fixtures/us-core");
+
+function gen(extra: Record<string, unknown> = {}) {
+  return generateOpenApi({
+    resources: ["Patient"],
+    fhirVersion: "r4",
+    ig: IG_DIR,
+    profiles: ["us-core-patient"],
+    ...extra,
+  }) as any;
+}
+
+describe("profile application (US Core Patient fixture)", () => {
+  it("emits a named profile schema referenced from the base paths", () => {
+    const doc = gen();
+    const profile = doc.components.schemas.USCorePatientProfile;
+    expect(profile).toBeDefined();
+    expect(profile["x-fhir-profile"]).toBe(
+      "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient",
+    );
+    // Base resource schema is not emitted (per the named-profile decision).
+    expect(doc.components.schemas.Patient).toBeUndefined();
+    // Paths stay at /Patient but reference the profiled schema.
+    expect(doc.paths["/Patient"]).toBeDefined();
+    const bodyRef =
+      doc.paths["/Patient"].post.requestBody.content["application/fhir+json"].schema.$ref;
+    expect(bodyRef).toBe("#/components/schemas/USCorePatientProfile");
+  });
+
+  it("applies tightened cardinality as required properties", () => {
+    const profile = gen().components.schemas.USCorePatientProfile;
+    expect(profile.required).toEqual(expect.arrayContaining(["identifier", "name", "gender"]));
+  });
+
+  it("keeps resourceType as the base type, not the profile name", () => {
+    const rt = gen().components.schemas.USCorePatientProfile.properties.resourceType;
+    expect(rt.enum).toEqual(["Patient"]);
+  });
+
+  it("resolves a core-defined required binding to an enum via the core fallback", () => {
+    const gender = gen().components.schemas.USCorePatientProfile.properties.gender;
+    expect([...gender.enum].sort()).toEqual(["female", "male", "other", "unknown"]);
+  });
+
+  it("surfaces must-support as a non-enforced constraint note", () => {
+    const name = gen().components.schemas.USCorePatientProfile.properties.name;
+    expect(name.description).toMatch(/must-support/);
+  });
+
+  it("narrows ResourceList to the profiled schema", () => {
+    const resourceList = JSON.stringify(gen().components.schemas.ResourceList);
+    expect(resourceList).toContain("USCorePatientProfile");
+  });
+
+  it("validates against the OpenAPI meta-schema for both targets", async () => {
+    for (const openApiVersion of ["3.0.3", "3.1.0"] as const) {
+      const doc = gen({ openApiVersion });
+      const result = await new Validator().validate(structuredClone(doc));
+      expect(result.errors, JSON.stringify(result.errors ?? null).slice(0, 800)).toBeUndefined();
+      expect(result.valid).toBe(true);
+    }
+  });
+});
+
+describe("IG loading", () => {
+  let tarball: string;
+  let tmpDir: string;
+
+  beforeAll(() => {
+    // Pack the fixture directory into a .tgz to exercise tarball loading.
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "fhir-oas-ig-test-"));
+    tarball = path.join(tmpDir, "us-core.tgz");
+    execFileSync("tar", ["-czf", tarball, "-C", IG_DIR, "package"], { stdio: "pipe" });
+  });
+  afterAll(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  it("loads from an unpacked directory", () => {
+    const ig = loadIgSync(IG_DIR);
+    expect(ig.name).toBe("hl7.fhir.us.core");
+    expect(ig.fhirVersion).toBe("r4");
+    expect(ig.profiles.map((p) => p.type)).toEqual(
+      expect.arrayContaining(["Patient", "Observation"]),
+    );
+  });
+
+  it("loads from a tarball", async () => {
+    const ig = await loadIg(tarball);
+    expect(ig.profiles.some((p) => p.url.endsWith("us-core-patient"))).toBe(true);
+  });
+
+  it("fetches from the registry with a mocked fetch and caches the tarball", async () => {
+    const bytes = fs.readFileSync(tarball);
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls++;
+      return new Response(bytes, { status: 200 });
+    }) as unknown as typeof fetch;
+    const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), "fhir-oas-cache-"));
+    try {
+      const opts = { fetchImpl, cacheDir };
+      const first = await loadIg("hl7.fhir.us.core@5.0.1", opts);
+      const second = await loadIg("hl7.fhir.us.core@5.0.1", opts);
+      expect(first.name).toBe("hl7.fhir.us.core");
+      expect(second.name).toBe("hl7.fhir.us.core");
+      expect(calls).toBe(1); // second load served from cache
+    } finally {
+      fs.rmSync(cacheDir, { recursive: true, force: true });
+    }
+  });
+
+  it("surfaces a registry 404 as an actionable error", async () => {
+    const fetchImpl = (async () =>
+      new Response("not found", { status: 404 })) as unknown as typeof fetch;
+    await expect(
+      loadIg("no.such.package@1.0.0", { fetchImpl, cacheDir: os.tmpdir() }),
+    ).rejects.toThrow(/404|download the package/);
+  });
+});
+
+describe("profile error handling and constraint edge cases", () => {
+  it("rejects a FHIR-version mismatch", () => {
+    expect(() =>
+      generateOpenApi({
+        resources: ["Patient"],
+        fhirVersion: "r5",
+        ig: IG_DIR,
+        profiles: ["us-core-patient"],
+      }),
+    ).toThrow(/targets FHIR R4/i);
+  });
+
+  it("rejects --profile without --ig and unknown profiles", () => {
+    expect(() =>
+      generateOpenApi({ resources: ["Patient"], fhirVersion: "r4", profiles: ["x"] }),
+    ).toThrow(/requires --ig|point at the IG/i);
+    expect(() =>
+      generateOpenApi({
+        resources: ["Patient"],
+        fhirVersion: "r4",
+        ig: IG_DIR,
+        profiles: ["not-a-profile"],
+      }),
+    ).toThrow(/not found/i);
+  });
+
+  it("drops max:0 elements and pins fixed values to a const (synthetic profile)", () => {
+    // A minimal synthetic profile exercises constraints US Core doesn't apply
+    // at the top level: an element removed (max 0) and a fixed value.
+    const synthetic: MinStructureDefinition = {
+      name: "TinyPatient",
+      url: "http://example.org/StructureDefinition/tiny-patient",
+      kind: "resource",
+      type: "Patient",
+      abstract: false,
+      elements: [
+        { path: "Patient", min: 0, max: "*" },
+        { path: "Patient.gender", min: 1, max: "1", types: [{ code: "code" }], fixed: "female" },
+        { path: "Patient.birthDate", min: 0, max: "0", types: [{ code: "date" }] },
+        { path: "Patient.active", min: 0, max: "1", types: [{ code: "boolean" }] },
+      ],
+    };
+    const registry = buildRegistryFromStructureDefinitions("r4");
+    emitStructureDefinitionSchemas(synthetic, registry.definitions, {
+      rootName: "TinyPatient",
+      isResourceRoot: true,
+      resourceDisplayName: "Patient",
+      profile: true,
+    });
+    const schema = registry.definitions.get("TinyPatient") as any;
+    expect(schema.properties.gender.const).toBe("female");
+    expect(schema.properties.birthDate).toBeUndefined(); // max 0 removed
+    expect(schema.properties.active).toBeDefined();
+    expect(schema.required).toContain("gender");
+  });
+
+  it("buildCoreValueSetFallback resolves administrative-gender", () => {
+    const resolve = buildCoreValueSetFallback("r4");
+    const codes = resolve("http://hl7.org/fhir/ValueSet/administrative-gender");
+    expect(codes && [...codes].sort()).toEqual(["female", "male", "other", "unknown"]);
+    expect(resolve("http://example.org/ValueSet/nope")).toBeUndefined();
+  });
+
+  it("applyProfile is deterministic", () => {
+    const a = buildRegistryFromStructureDefinitions("r4");
+    const b = buildRegistryFromStructureDefinitions("r4");
+    const ig = loadIgSync(IG_DIR);
+    applyProfile(ig, "us-core-patient", a);
+    applyProfile(ig, "us-core-patient", b);
+    expect(a.definitions.get("USCorePatientProfile")).toEqual(
+      b.definitions.get("USCorePatientProfile"),
+    );
+  });
+});

@@ -1,6 +1,8 @@
 import { buildRegistryFromSchemaJson } from "./backends/schemaJson.js";
 import { buildRegistryFromStructureDefinitions } from "./backends/structureDefinition.js";
 import { convertSchema } from "./emit/schema.js";
+import { loadIgSync, type IgContext } from "./ig/package.js";
+import { applyProfile, buildCoreValueSetFallback } from "./ig/profile.js";
 import { extractClosure, type DefinitionRegistry } from "./ir/registry.js";
 import { buildOperationPaths } from "./operations.js";
 import { buildResourcePaths, commonSearchParameterComponents } from "./paths.js";
@@ -50,6 +52,16 @@ function assertFhirVersion(fhirVersion: string): asserts fhirVersion is FhirVers
   }
 }
 
+/** Resolves options.ig to an IgContext: a local path is loaded synchronously. */
+function resolveIg(options: GenerateOptions): IgContext {
+  const ig = options.ig;
+  if (!ig) throw new Error("--profile requires --ig: point at the IG package.");
+  if (typeof ig === "string") {
+    return loadIgSync(ig, { coreValueSetFallback: buildCoreValueSetFallback(options.fhirVersion) });
+  }
+  return ig as IgContext;
+}
+
 /**
  * Generates an OpenAPI document covering the requested FHIR resources: their
  * full schema dependency closure plus the standard FHIR RESTful interactions.
@@ -65,22 +77,55 @@ export function generateOpenApi(options: GenerateOptions): OpenApiDocument {
   }
 
   const registry = buildRegistry(options.fhirVersion, options.source ?? "schema-json");
-  const resources = [...new Set(options.resources.map((r) => resolveResourceName(registry, r)))];
+
+  // Apply IG profiles (if any) into the registry, mapping each profiled base
+  // resource to its emitted schema name. The base resource is auto-included.
+  const schemaByResource = new Map<string, string>();
+  const resourceSet = new Set(options.resources.map((r) => resolveResourceName(registry, r)));
+  if (options.profiles?.length) {
+    const ig = resolveIg(options);
+    if (ig.fhirVersion !== options.fhirVersion) {
+      throw new Error(
+        `IG package "${ig.name}" targets FHIR ${ig.fhirVersion.toUpperCase()}, but generation ` +
+          `is for ${options.fhirVersion.toUpperCase()}. Use --fhir-version ${ig.fhirVersion}.`,
+      );
+    }
+    for (const profileId of options.profiles) {
+      const applied = applyProfile(ig, profileId, registry);
+      const base = resolveResourceName(registry, applied.resourceType);
+      if (schemaByResource.has(base)) {
+        throw new Error(
+          `Multiple profiles target ${base}; generate one profiled resource per run.`,
+        );
+      }
+      schemaByResource.set(base, applied.schemaName);
+      resourceSet.add(base);
+    }
+  } else if (options.ig) {
+    throw new Error("--ig requires --profile: name the profile(s) to apply.");
+  }
+
+  const resources = [...resourceSet];
+  const schemaFor = (resource: string) => schemaByResource.get(resource) ?? resource;
 
   const operationPaths: Record<string, JsonSchemaNode> = {};
   const operationRoots: string[] = [];
   if (options.operations) {
     const knownResources = new Set(registry.resourceNames);
     for (const resource of resources) {
-      const result = buildOperationPaths(options.fhirVersion, resource, knownResources);
+      const result = buildOperationPaths(options.fhirVersion, resource, knownResources, schemaFor);
       Object.assign(operationPaths, result.paths);
       operationRoots.push(...result.extraSchemaRoots);
     }
   }
 
+  // Closure roots use the profiled schema name where a resource is profiled,
+  // so the base schema is only emitted if something else references it.
   // Bundle and OperationOutcome are always present: search/history responses
   // are Bundles and every error response is an OperationOutcome.
-  const roots = [...new Set([...resources, "Bundle", "OperationOutcome", ...operationRoots])];
+  const roots = [
+    ...new Set([...resources.map(schemaFor), "Bundle", "OperationOutcome", ...operationRoots]),
+  ];
   const { schemas } = extractClosure(registry, roots, options.trim ?? {}, roots);
 
   const componentSchemas: Record<string, JsonSchemaNode> = {};
@@ -91,7 +136,7 @@ export function generateOpenApi(options: GenerateOptions): OpenApiDocument {
 
   const paths: Record<string, JsonSchemaNode> = {};
   for (const resource of resources) {
-    Object.assign(paths, buildResourcePaths(options.fhirVersion, resource));
+    Object.assign(paths, buildResourcePaths(options.fhirVersion, resource, schemaFor(resource)));
   }
   Object.assign(paths, operationPaths);
 

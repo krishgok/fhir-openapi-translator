@@ -1,0 +1,12 @@
+{
+  "name": "hl7.fhir.us.core",
+  "version": "5.0.1",
+  "fhir-version-list": [
+    "4.0.1"
+  ],
+  "fhirVersions": [
+    "4.0.1"
+  ],
+  "type": "IG",
+  "description": "US Core 5.0.1 test subset (8 StructureDefinitions) — fixtures for fhir-openapi-translator"
+}

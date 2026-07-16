@@ -12,6 +12,11 @@
  *   definitions/<ver>/fhir.schema.json.gz          official JSON Schema
  *   definitions/<ver>/search-parameters.json.gz    Bundle of SearchParameter
  *   definitions/<ver>/structure-definitions.json.gz  minimized snapshots
+ *   definitions/<ver>/operation-definitions.json.gz  minimized operations
+ *
+ * The element-minimizing shape here mirrors src/ig/minimize.ts, which does the
+ * same at generation time for IG packages (and additionally captures profile
+ * constraints the base definitions never need). Keep the two in step.
  */
 import { execFileSync } from "node:child_process";
 import { gzipSync } from "node:zlib";
