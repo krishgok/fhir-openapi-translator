@@ -50,20 +50,32 @@ export interface OperationPathsResult {
  * with a Parameters request body. System-level-only operations are not
  * resource-scoped and are out of scope here.
  */
+export interface OperationPathOptions {
+  /** Maps a resource type to the schema name to reference (profile-aware). */
+  schemaFor?: (resourceType: string) => string;
+  /**
+   * Restrict to operations whose code or canonical URL is in this set (e.g.
+   * from a CapabilityStatement). Default: all operations applicable to the
+   * resource.
+   */
+  only?: ReadonlySet<string>;
+}
+
 export function buildOperationPaths(
   fhirVersion: FhirVersion,
   resource: string,
   knownResources: ReadonlySet<string>,
-  /** Maps a resource type to the schema name to reference (profile-aware). */
-  schemaFor: (resourceType: string) => string = (r) => r,
+  options: OperationPathOptions = {},
 ): OperationPathsResult {
+  const schemaFor = options.schemaFor ?? ((r) => r);
   const paths: Record<string, JsonSchemaNode> = {};
   const extraSchemaRoots = new Set<string>();
 
   const applicable = loadOperationDefinitions(fhirVersion).filter(
     (op) =>
       (op.type || op.instance) &&
-      (op.resource.includes(resource) || op.resource.includes("Resource")),
+      (op.resource.includes(resource) || op.resource.includes("Resource")) &&
+      (!options.only || options.only.has(op.code) || options.only.has(op.url)),
   );
 
   for (const op of applicable) {

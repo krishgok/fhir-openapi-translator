@@ -73,9 +73,48 @@ export function commonSearchParameterComponents(): Record<string, JsonSchemaNode
   return out;
 }
 
-function resourceSearchParameters(fhirVersion: FhirVersion, resource: string): JsonSchemaNode[] {
+/** FHIR RESTful interaction codes (CapabilityStatement.rest.resource.interaction). */
+export type FhirInteraction =
+  | "read"
+  | "vread"
+  | "update"
+  | "patch"
+  | "delete"
+  | "history-instance"
+  | "history-type"
+  | "create"
+  | "search-type";
+
+export const ALL_INTERACTIONS: readonly FhirInteraction[] = [
+  "read",
+  "vread",
+  "update",
+  "patch",
+  "delete",
+  "history-instance",
+  "history-type",
+  "create",
+  "search-type",
+];
+
+export interface ResourcePathOptions {
+  /** Emit only these interactions. Default: all of them. */
+  interactions?: ReadonlySet<FhirInteraction>;
+  /**
+   * Restrict resource-specific search parameters to these codes (the common
+   * result parameters like `_id`/`_count` are always kept). Default: all
+   * search parameters the FHIR version defines for the resource.
+   */
+  searchParamCodes?: ReadonlySet<string>;
+}
+
+function resourceSearchParameters(
+  fhirVersion: FhirVersion,
+  resource: string,
+  only?: ReadonlySet<string>,
+): JsonSchemaNode[] {
   return loadSearchParameters(fhirVersion)
-    .filter((sp) => sp.base.includes(resource))
+    .filter((sp) => sp.base.includes(resource) && (!only || only.has(sp.code)))
     .sort((a, b) => a.code.localeCompare(b.code))
     .map((sp) => ({
       name: sp.code,
@@ -88,141 +127,156 @@ function resourceSearchParameters(fhirVersion: FhirVersion, resource: string): J
     }));
 }
 
+const historyParameters = () => [
+  { $ref: `${PARAMETERS}_count` },
+  {
+    name: "_since",
+    in: "query",
+    required: false,
+    description: "Only include versions created at or after this instant",
+    schema: { type: "string", format: "date-time" },
+  },
+];
+
 /**
- * Standard FHIR RESTful API interactions for one resource type:
- * search-type, create, read, update, patch, delete, vread, and history
- * (instance and type level).
+ * FHIR RESTful API interactions for one resource type. By default every
+ * standard interaction (search, create, read, vread, update, patch, delete,
+ * and instance/type history) is emitted; `options.interactions` restricts the
+ * set (e.g. from a CapabilityStatement), and empty path items are dropped.
  */
 export function buildResourcePaths(
   fhirVersion: FhirVersion,
   resource: string,
   /** Schema referenced by request/response bodies; a profile name or the resource. */
   schemaName: string = resource,
+  options: ResourcePathOptions = {},
 ): Record<string, JsonSchemaNode> {
-  const searchParams = [
-    ...Object.keys(COMMON_SEARCH_PARAMETERS).map((name) => ({ $ref: `${PARAMETERS}${name}` })),
-    ...resourceSearchParameters(fhirVersion, resource),
-  ];
+  const want = (interaction: FhirInteraction) =>
+    !options.interactions || options.interactions.has(interaction);
   const body = () => fhirContent(schemaName);
+  const idParam = () => idParameter("id", `Logical id of the ${resource}`);
+  const paths: Record<string, JsonSchemaNode> = {};
 
-  return {
-    [`/${resource}`]: {
-      get: {
-        tags: [resource],
-        summary: `Search for ${resource} resources`,
-        operationId: `search${resource}`,
-        parameters: searchParams,
-        responses: {
-          "200": {
-            description: `Bundle of matching ${resource} resources`,
-            content: fhirContent("Bundle"),
-          },
-          ...errorResponses(),
+  const typeItem: Record<string, JsonSchemaNode> = {};
+  if (want("search-type")) {
+    typeItem.get = {
+      tags: [resource],
+      summary: `Search for ${resource} resources`,
+      operationId: `search${resource}`,
+      parameters: [
+        ...Object.keys(COMMON_SEARCH_PARAMETERS).map((name) => ({ $ref: `${PARAMETERS}${name}` })),
+        ...resourceSearchParameters(fhirVersion, resource, options.searchParamCodes),
+      ],
+      responses: {
+        "200": {
+          description: `Bundle of matching ${resource} resources`,
+          content: fhirContent("Bundle"),
         },
+        ...errorResponses(),
       },
-      post: {
-        tags: [resource],
-        summary: `Create a ${resource} resource`,
-        operationId: `create${resource}`,
-        requestBody: {
-          required: true,
-          content: body(),
-        },
-        responses: {
-          "201": { description: `${resource} created`, content: body() },
-          ...errorResponses(),
-        },
+    };
+  }
+  if (want("create")) {
+    typeItem.post = {
+      tags: [resource],
+      summary: `Create a ${resource} resource`,
+      operationId: `create${resource}`,
+      requestBody: { required: true, content: body() },
+      responses: {
+        "201": { description: `${resource} created`, content: body() },
+        ...errorResponses(),
       },
-    },
-    [`/${resource}/{id}`]: {
-      parameters: [idParameter("id", `Logical id of the ${resource}`)],
-      get: {
-        tags: [resource],
-        summary: `Read a ${resource} resource by id`,
-        operationId: `read${resource}`,
-        responses: {
-          "200": { description: `The ${resource} resource`, content: body() },
-          ...errorResponses(),
-        },
+    };
+  }
+  if (Object.keys(typeItem).length > 0) paths[`/${resource}`] = typeItem;
+
+  const instanceItem: Record<string, JsonSchemaNode> = {};
+  if (want("read")) {
+    instanceItem.get = {
+      tags: [resource],
+      summary: `Read a ${resource} resource by id`,
+      operationId: `read${resource}`,
+      responses: {
+        "200": { description: `The ${resource} resource`, content: body() },
+        ...errorResponses(),
       },
-      put: {
-        tags: [resource],
-        summary: `Update (or create) a ${resource} resource by id`,
-        operationId: `update${resource}`,
-        parameters: [
-          {
-            name: "If-Match",
-            in: "header",
-            required: false,
-            description: "Version-aware update: weak ETag of the version being updated",
-            schema: { type: "string" },
-          },
-        ],
-        requestBody: { required: true, content: body() },
-        responses: {
-          "200": { description: `${resource} updated`, content: body() },
-          "201": { description: `${resource} created`, content: body() },
-          ...errorResponses(),
+    };
+  }
+  if (want("update")) {
+    instanceItem.put = {
+      tags: [resource],
+      summary: `Update (or create) a ${resource} resource by id`,
+      operationId: `update${resource}`,
+      parameters: [
+        {
+          name: "If-Match",
+          in: "header",
+          required: false,
+          description: "Version-aware update: weak ETag of the version being updated",
+          schema: { type: "string" },
         },
+      ],
+      requestBody: { required: true, content: body() },
+      responses: {
+        "200": { description: `${resource} updated`, content: body() },
+        "201": { description: `${resource} created`, content: body() },
+        ...errorResponses(),
       },
-      patch: {
-        tags: [resource],
-        summary: `Patch a ${resource} resource by id`,
-        operationId: `patch${resource}`,
-        requestBody: {
-          required: true,
-          content: {
-            "application/json-patch+json": {
-              schema: {
-                type: "array",
-                items: { type: "object", additionalProperties: true },
-                description: "JSON Patch operations (RFC 6902)",
-              },
+    };
+  }
+  if (want("patch")) {
+    instanceItem.patch = {
+      tags: [resource],
+      summary: `Patch a ${resource} resource by id`,
+      operationId: `patch${resource}`,
+      requestBody: {
+        required: true,
+        content: {
+          "application/json-patch+json": {
+            schema: {
+              type: "array",
+              items: { type: "object", additionalProperties: true },
+              description: "JSON Patch operations (RFC 6902)",
             },
           },
         },
-        responses: {
-          "200": { description: `${resource} patched`, content: body() },
-          ...errorResponses(),
-        },
       },
-      delete: {
-        tags: [resource],
-        summary: `Delete a ${resource} resource by id`,
-        operationId: `delete${resource}`,
-        responses: {
-          "204": { description: `${resource} deleted` },
-          ...errorResponses(),
-        },
+      responses: {
+        "200": { description: `${resource} patched`, content: body() },
+        ...errorResponses(),
       },
-    },
-    [`/${resource}/{id}/_history`]: {
-      parameters: [idParameter("id", `Logical id of the ${resource}`)],
+    };
+  }
+  if (want("delete")) {
+    instanceItem.delete = {
+      tags: [resource],
+      summary: `Delete a ${resource} resource by id`,
+      operationId: `delete${resource}`,
+      responses: { "204": { description: `${resource} deleted` }, ...errorResponses() },
+    };
+  }
+  if (Object.keys(instanceItem).length > 0) {
+    paths[`/${resource}/{id}`] = { parameters: [idParam()], ...instanceItem };
+  }
+
+  if (want("history-instance")) {
+    paths[`/${resource}/{id}/_history`] = {
+      parameters: [idParam()],
       get: {
         tags: [resource],
         summary: `History of a ${resource} instance`,
         operationId: `history${resource}Instance`,
-        parameters: [
-          { $ref: `${PARAMETERS}_count` },
-          {
-            name: "_since",
-            in: "query",
-            required: false,
-            description: "Only include versions created at or after this instant",
-            schema: { type: "string", format: "date-time" },
-          },
-        ],
+        parameters: historyParameters(),
         responses: {
           "200": { description: "History bundle", content: fhirContent("Bundle") },
           ...errorResponses(),
         },
       },
-    },
-    [`/${resource}/{id}/_history/{vid}`]: {
-      parameters: [
-        idParameter("id", `Logical id of the ${resource}`),
-        idParameter("vid", "Version id of the resource"),
-      ],
+    };
+  }
+  if (want("vread")) {
+    paths[`/${resource}/{id}/_history/{vid}`] = {
+      parameters: [idParam(), idParameter("vid", "Version id of the resource")],
       get: {
         tags: [resource],
         summary: `Read a specific version of a ${resource} resource`,
@@ -232,27 +286,22 @@ export function buildResourcePaths(
           ...errorResponses(),
         },
       },
-    },
-    [`/${resource}/_history`]: {
+    };
+  }
+  if (want("history-type")) {
+    paths[`/${resource}/_history`] = {
       get: {
         tags: [resource],
         summary: `History across all ${resource} resources`,
         operationId: `history${resource}Type`,
-        parameters: [
-          { $ref: `${PARAMETERS}_count` },
-          {
-            name: "_since",
-            in: "query",
-            required: false,
-            description: "Only include versions created at or after this instant",
-            schema: { type: "string", format: "date-time" },
-          },
-        ],
+        parameters: historyParameters(),
         responses: {
           "200": { description: "History bundle", content: fhirContent("Bundle") },
           ...errorResponses(),
         },
       },
-    },
-  };
+    };
+  }
+
+  return paths;
 }
