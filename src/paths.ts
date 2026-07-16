@@ -96,11 +96,14 @@ function resourceSearchParameters(fhirVersion: FhirVersion, resource: string): J
 export function buildResourcePaths(
   fhirVersion: FhirVersion,
   resource: string,
+  /** Schema referenced by request/response bodies; a profile name or the resource. */
+  schemaName: string = resource,
 ): Record<string, JsonSchemaNode> {
   const searchParams = [
     ...Object.keys(COMMON_SEARCH_PARAMETERS).map((name) => ({ $ref: `${PARAMETERS}${name}` })),
     ...resourceSearchParameters(fhirVersion, resource),
   ];
+  const body = () => fhirContent(schemaName);
 
   return {
     [`/${resource}`]: {
@@ -123,10 +126,10 @@ export function buildResourcePaths(
         operationId: `create${resource}`,
         requestBody: {
           required: true,
-          content: fhirContent(resource),
+          content: body(),
         },
         responses: {
-          "201": { description: `${resource} created`, content: fhirContent(resource) },
+          "201": { description: `${resource} created`, content: body() },
           ...errorResponses(),
         },
       },
@@ -138,7 +141,7 @@ export function buildResourcePaths(
         summary: `Read a ${resource} resource by id`,
         operationId: `read${resource}`,
         responses: {
-          "200": { description: `The ${resource} resource`, content: fhirContent(resource) },
+          "200": { description: `The ${resource} resource`, content: body() },
           ...errorResponses(),
         },
       },
@@ -155,10 +158,10 @@ export function buildResourcePaths(
             schema: { type: "string" },
           },
         ],
-        requestBody: { required: true, content: fhirContent(resource) },
+        requestBody: { required: true, content: body() },
         responses: {
-          "200": { description: `${resource} updated`, content: fhirContent(resource) },
-          "201": { description: `${resource} created`, content: fhirContent(resource) },
+          "200": { description: `${resource} updated`, content: body() },
+          "201": { description: `${resource} created`, content: body() },
           ...errorResponses(),
         },
       },
@@ -179,7 +182,7 @@ export function buildResourcePaths(
           },
         },
         responses: {
-          "200": { description: `${resource} patched`, content: fhirContent(resource) },
+          "200": { description: `${resource} patched`, content: body() },
           ...errorResponses(),
         },
       },
@@ -225,7 +228,7 @@ export function buildResourcePaths(
         summary: `Read a specific version of a ${resource} resource`,
         operationId: `vread${resource}`,
         responses: {
-          "200": { description: `The ${resource} resource version`, content: fhirContent(resource) },
+          "200": { description: `The ${resource} resource version`, content: body() },
           ...errorResponses(),
         },
       },

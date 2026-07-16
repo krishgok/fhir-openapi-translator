@@ -89,6 +89,36 @@ describe("fhir-oas CLI (requires `npm run build`)", () => {
     expect(doc.components.schemas.Patient.properties.resourceType.enum).toEqual(["Patient"]);
   });
 
+  it("generates a profiled spec and checks it round-trips", () => {
+    const igDir = path.resolve(__dirname, "fixtures/us-core");
+    const out = tmpFile("uscore.yaml");
+    run([
+      "generate", "Patient",
+      "--fhir-version", "r4",
+      "--ig", igDir,
+      "--profile", "us-core-patient",
+      "-o", out,
+    ]);
+    const doc = parse(fs.readFileSync(out, "utf8"));
+    expect(doc.components.schemas.USCorePatientProfile).toBeDefined();
+    expect(doc.components.schemas.Patient).toBeUndefined();
+
+    const inSync = run([
+      "check", "Patient",
+      "--fhir-version", "r4",
+      "--ig", igDir,
+      "--profile", "us-core-patient",
+      "--file", out,
+    ]);
+    expect(inSync.code).toBe(0);
+  });
+
+  it("lists IG profiles with --ig", () => {
+    const igDir = path.resolve(__dirname, "fixtures/us-core");
+    const { stdout } = run(["list", "--ig", igDir]);
+    expect(stdout).toMatch(/us-core-patient/);
+  });
+
   it("lists resources", () => {
     const { stdout } = run(["list", "--fhir-version", "r4b"]);
     expect(stdout.split("\n")).toContain("Patient");

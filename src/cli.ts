@@ -2,6 +2,8 @@
 import { Command, Option } from "commander";
 import fs from "node:fs";
 import { generateOpenApi, listResources } from "./generate.js";
+import { loadIg, type IgContext } from "./ig/package.js";
+import { buildCoreValueSetFallback } from "./ig/profile.js";
 import { diffAgainstYaml, MergeConflictError, mergeIntoYaml, stringifyDocument } from "./merge.js";
 import type { FhirVersion, GenerateOptions, OpenApiVersion, SourceBackend } from "./types.js";
 
@@ -49,6 +51,14 @@ function addGenerationOptions(command: Command): Command {
       "--max-depth <n>",
       "stub schema definitions deeper than n hops from the requested resources",
       (value) => Number.parseInt(value, 10),
+    )
+    .option(
+      "--ig <package>",
+      "IG package to apply profiles from: a local .tgz/directory or a registry coordinate (name@version)",
+    )
+    .option(
+      "--profile <id...>",
+      "profile id, name, or canonical URL to apply to its base resource (requires --ig)",
     );
 }
 
@@ -63,23 +73,43 @@ interface SharedCliOptions {
   /** commander maps --no-enums here: undefined/true = keep, false = strip. */
   enums?: boolean;
   maxDepth?: number;
+  ig?: string;
+  profile?: string[];
 }
 
-function toGenerateOptions(resources: string[], opts: SharedCliOptions): GenerateOptions {
+/**
+ * Resolves the shared generation options, loading the IG package (async, so
+ * registry coordinates work) when profiles are requested.
+ */
+async function toGenerateOptions(
+  resources: string[],
+  opts: SharedCliOptions,
+): Promise<GenerateOptions> {
   if (opts.maxDepth !== undefined && (!Number.isInteger(opts.maxDepth) || opts.maxDepth < 0)) {
     throw new Error("--max-depth must be a non-negative integer");
   }
   const openApiVersion: OpenApiVersion = opts.openapiVersion.startsWith("3.1")
     ? "3.1.0"
     : "3.0.3";
+  const fhirVersion = opts.fhirVersion as FhirVersion;
+
+  let ig: IgContext | undefined;
+  if (opts.ig) {
+    ig = await loadIg(opts.ig, { coreValueSetFallback: buildCoreValueSetFallback(fhirVersion) });
+  } else if (opts.profile?.length) {
+    throw new Error("--profile requires --ig: point at the IG package.");
+  }
+
   return {
     resources,
-    fhirVersion: opts.fhirVersion as FhirVersion,
+    fhirVersion,
     openApiVersion,
     source: opts.source as SourceBackend,
     operations: opts.operations,
     baseUrl: opts.baseUrl,
     title: opts.title,
+    ig,
+    profiles: opts.profile,
     trim: {
       excludeNarrative: opts.excludeNarrative,
       maxDepth: opts.maxDepth,
@@ -102,12 +132,12 @@ addGenerationOptions(
       .choices(["yaml", "json"])
       .default("yaml"),
   )
-  .action((resources: string[], opts) => {
+  .action(async (resources: string[], opts) => {
     try {
       if (opts.output && opts.mergeInto) {
         throw new Error("Use either --output or --merge-into, not both");
       }
-      const document = generateOpenApi(toGenerateOptions(resources, opts));
+      const document = generateOpenApi(await toGenerateOptions(resources, opts));
 
       if (opts.mergeInto) {
         const existing = fs.existsSync(opts.mergeInto)
@@ -143,12 +173,12 @@ addGenerationOptions(
     .argument("<resources...>", "FHIR resource names the spec should cover"),
 )
   .requiredOption("--file <file>", "spec file (YAML or JSON) to check")
-  .action((resources: string[], opts) => {
+  .action(async (resources: string[], opts) => {
     try {
       if (!fs.existsSync(opts.file)) {
         throw new Error(`No such file: ${opts.file}`);
       }
-      const document = generateOpenApi(toGenerateOptions(resources, opts));
+      const document = generateOpenApi(await toGenerateOptions(resources, opts));
       const diff = diffAgainstYaml(document, fs.readFileSync(opts.file, "utf8"));
       if (diff.inSync) {
         console.log(`${opts.file} is in sync`);
@@ -169,11 +199,24 @@ addGenerationOptions(
 
 program
   .command("list")
-  .description("List the FHIR resource types available for a FHIR version")
-  .addOption(fhirVersionOption())
+  .description("List the FHIR resource types for a version, or the profiles in an IG package")
+  .addOption(
+    new Option("-f, --fhir-version <version>", "FHIR version (required unless --ig is given)").choices(
+      ["r4", "r4b", "r5"],
+    ),
+  )
   .addOption(sourceOption())
-  .action((opts) => {
+  .option("--ig <package>", "list the profiles in an IG package instead of core resources")
+  .action(async (opts) => {
     try {
+      if (opts.ig) {
+        const ig = await loadIg(opts.ig);
+        for (const profile of ig.profiles) {
+          console.log(`${profile.id ?? profile.name}\t${profile.type}\t${profile.url}`);
+        }
+        return;
+      }
+      if (!opts.fhirVersion) throw new Error("--fhir-version is required (or pass --ig to list profiles)");
       for (const name of listResources(opts.fhirVersion as FhirVersion, opts.source)) {
         console.log(name);
       }
@@ -191,4 +234,4 @@ function fail(error: unknown): never {
   process.exit(1);
 }
 
-program.parse();
+program.parseAsync();

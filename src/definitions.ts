@@ -105,6 +105,20 @@ export interface MinElement {
   contentReference?: string;
   types?: MinElementType[];
   binding?: { strength: string; valueSet: string; codes?: string[] };
+  /**
+   * Value the element is fixed to by a profile (`fixed[x]`), normalized to a
+   * JSON value. Only populated for profiles loaded from an IG package; the
+   * vendored base definitions do not carry it.
+   */
+  fixed?: unknown;
+  /** Profile `mustSupport` flag (surfaced in descriptions, not enforced). */
+  mustSupport?: boolean;
+  /**
+   * Human labels for profile constraints this tool does not enforce in
+   * OpenAPI (e.g. "pattern", "slicing"), surfaced in the property description
+   * and `x-fhir-constraints-omitted`. IG profiles only.
+   */
+  omittedConstraints?: string[];
 }
 
 export interface MinStructureDefinition {

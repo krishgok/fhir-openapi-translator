@@ -33,10 +33,31 @@ export interface TrimOptions {
   noEnums?: boolean;
 }
 
+/** An IG package resolved to profiles + terminology (see ig/package.ts). */
+export interface IgContextLike {
+  name: string;
+  version: string;
+  fhirVersion: FhirVersion;
+  profiles: unknown[];
+  profilesMissingSnapshot: string[];
+  resolveValueSet: (valueSetUrl: string) => string[] | undefined;
+}
+
 export interface GenerateOptions {
   /** FHIR resource names, e.g. ["Patient", "Observation"]. */
   resources: string[];
   fhirVersion: FhirVersion;
+  /**
+   * IG package to apply profiles from: a local path (`.tgz` or unpacked
+   * directory) loaded synchronously, or a pre-resolved IgContext (use the
+   * async `loadIg` for registry coordinates). Required when `profiles` is set.
+   */
+  ig?: string | IgContextLike;
+  /**
+   * Profile ids, names, or canonical URLs to apply to their base resources.
+   * Each profiled resource's schemas/paths reference the named profile schema.
+   */
+  profiles?: string[];
   /** Target OpenAPI version. Default: "3.0.3" (widest codegen support). */
   openApiVersion?: OpenApiVersion;
   /** Definition source backend. Default: "schema-json". */
