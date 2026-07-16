@@ -15,6 +15,7 @@ Ask for `Patient` and you get a self-contained OpenAPI document with the Patient
 - **Drift guard** — `fhir-oas check` verifies in CI that a committed spec still matches what generation would produce, and says how to fix it when it doesn't.
 - **FHIR operations** — `--operations` adds the standard operations for the requested resources (`$everything`, `$validate`, `$meta`, ...) from the official OperationDefinitions: GET with query parameters when all inputs are primitive, otherwise POST with a `Parameters` body.
 - **Profiles / Implementation Guides** — `--ig <package> --profile <id>` applies a profile (e.g. US Core Patient) from an IG package to its base resource: tightened cardinalities become `required`, removed elements (`max: 0`) are dropped, fixed values become `const`, and required bindings resolve to enums. The profiled schema is named after the profile (`USCorePatient`) and referenced from the base `/Patient` paths.
+- **CapabilityStatement-driven** — `--capability <file|url>` reads a server's `/metadata` and emits a spec matching *that server's* declared surface only: its resource types, its interactions (e.g. read + search but not delete), its search parameters, and its supported operations. Point it at a base URL and it appends `/metadata` for you.
 - **Trim options** — stub out the `Narrative` type or cap the dependency-closure depth for codegen targets that struggle with large schema graphs.
 
 ## Install
@@ -59,6 +60,10 @@ fhir-oas generate Patient -f r4 --ig hl7.fhir.us.core@5.0.1 --profile us-core-pa
 
 # List the profiles in an IG package
 fhir-oas list --ig ./hl7.fhir.us.core-5.0.1.tgz
+
+# Match a specific server's declared surface (resources, interactions, search params, operations)
+fhir-oas generate -f r4 --capability https://server.example.org/fhir   # appends /metadata
+fhir-oas generate -f r4 --capability ./metadata.json                    # or a saved statement
 ```
 
 `fhir-oas generate --help` shows all options, including `--source` (definition backend), `--title`, and `--force` (overwrite conflicting entries when merging).
@@ -94,6 +99,15 @@ const doc = generateOpenApi({
   ig,                                // or ig: "./us-core.tgz" (loaded synchronously)
   profiles: ["us-core-patient"],
 });
+```
+
+Match a server's CapabilityStatement (`loadCapabilityStatement` is async; `parseCapabilityStatement` takes an already-loaded object):
+
+```ts
+import { generateOpenApi, loadCapabilityStatement } from "fhir-openapi-translator";
+
+const capability = await loadCapabilityStatement("https://server.example.org/fhir");
+const doc = generateOpenApi({ fhirVersion: "r4", capability });  // resources come from the statement
 ```
 
 See `GenerateOptions` in the type declarations for the full API surface.
@@ -144,6 +158,7 @@ The IG package is a local `.tgz` / unpacked directory, or a `name@version` coord
 - Primitive-extension properties (`_field`) are kept for JSON fidelity; they roughly double the property count of each model.
 - Search parameters are typed as strings (except `_count`), because FHIR search values carry prefixes and modifiers (`ge2021-01-01`, `code:below=...`) that stricter types would reject. The FHIR type is preserved in `x-fhir-search-type`.
 - Operations are resource-scoped only: system-level operations (`GET /$export`-style, `$convert`, ...), `POST /_search`, batch/transaction semantics, and conditional headers beyond `If-Match` are not modeled. Multi-part operation parameters collapse to a generic `Parameters` body.
+- `--capability` reflects a server's *declared* surface: resource types the FHIR version doesn't define are skipped, and declared operations are emitted only when they map to a known OperationDefinition (system-level interactions like transaction/batch are not modeled). It restricts what's generated; it does not verify the server actually behaves as declared.
 - The two definition backends can differ cosmetically (e.g. naming of deeply nested backbone elements, primitive regex patterns); `schema-json` is the default and the reference.
 
 ## Development

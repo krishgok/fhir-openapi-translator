@@ -2,6 +2,7 @@
 import { Command, Option } from "commander";
 import fs from "node:fs";
 import { generateOpenApi, listResources } from "./generate.js";
+import { loadCapabilityStatement, type Capability } from "./capability.js";
 import { loadIg, type IgContext } from "./ig/package.js";
 import { buildCoreValueSetFallback } from "./ig/profile.js";
 import { diffAgainstYaml, MergeConflictError, mergeIntoYaml, stringifyDocument } from "./merge.js";
@@ -59,6 +60,10 @@ function addGenerationOptions(command: Command): Command {
     .option(
       "--profile <id...>",
       "profile id, name, or canonical URL to apply to its base resource (requires --ig)",
+    )
+    .option(
+      "--capability <source>",
+      "CapabilityStatement file or server base/metadata URL: emit only its declared surface",
     );
 }
 
@@ -75,6 +80,7 @@ interface SharedCliOptions {
   maxDepth?: number;
   ig?: string;
   profile?: string[];
+  capability?: string;
 }
 
 /**
@@ -100,6 +106,11 @@ async function toGenerateOptions(
     throw new Error("--profile requires --ig: point at the IG package.");
   }
 
+  let capability: Capability | undefined;
+  if (opts.capability) {
+    capability = await loadCapabilityStatement(opts.capability);
+  }
+
   return {
     resources,
     fhirVersion,
@@ -110,6 +121,7 @@ async function toGenerateOptions(
     title: opts.title,
     ig,
     profiles: opts.profile,
+    capability,
     trim: {
       excludeNarrative: opts.excludeNarrative,
       maxDepth: opts.maxDepth,
@@ -122,7 +134,10 @@ addGenerationOptions(
   program
     .command("generate")
     .description("Generate an OpenAPI spec for one or more FHIR resources")
-    .argument("<resources...>", 'FHIR resource names, e.g. "Patient Observation"'),
+    .argument(
+      "[resources...]",
+      'FHIR resource names, e.g. "Patient Observation" (optional with --capability)',
+    ),
 )
   .option("-o, --output <file>", "write a new spec file (YAML unless --format json)")
   .option("--merge-into <file>", "merge into an existing YAML spec file")
@@ -170,7 +185,7 @@ addGenerationOptions(
     .description(
       "Verify that a committed spec file is in sync with what generation would produce (CI drift guard)",
     )
-    .argument("<resources...>", "FHIR resource names the spec should cover"),
+    .argument("[resources...]", "FHIR resource names the spec should cover (optional with --capability)"),
 )
   .requiredOption("--file <file>", "spec file (YAML or JSON) to check")
   .action(async (resources: string[], opts) => {
@@ -187,8 +202,13 @@ addGenerationOptions(
       console.error(`${opts.file} is out of sync with generation:`);
       for (const location of diff.missing) console.error(`  missing: ${location}`);
       for (const location of diff.changed) console.error(`  changed: ${location}`);
+      const modeFlags =
+        (opts.capability ? ` --capability ${opts.capability}` : "") +
+        (opts.ig ? ` --ig ${opts.ig}` : "") +
+        (opts.profile?.length ? ` --profile ${opts.profile.join(" ")}` : "") +
+        (opts.operations ? " --operations" : "");
       console.error(
-        `Regenerate with: fhir-oas generate ${resources.join(" ")} --fhir-version ${opts.fhirVersion} --merge-into ${opts.file}` +
+        `Regenerate with: fhir-oas generate ${resources.join(" ")} --fhir-version ${opts.fhirVersion}${modeFlags} --merge-into ${opts.file}` +
           (diff.changed.length > 0 ? " --force" : ""),
       );
       process.exit(1);

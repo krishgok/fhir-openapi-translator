@@ -43,10 +43,31 @@ export interface IgContextLike {
   resolveValueSet: (valueSetUrl: string) => string[] | undefined;
 }
 
+/** A parsed CapabilityStatement (see capability.ts). */
+export interface CapabilityLike {
+  fhirVersion?: string;
+  resources: {
+    type: string;
+    interactions: Set<string>;
+    searchParamCodes: Set<string>;
+    operations: Set<string>;
+  }[];
+}
+
 export interface GenerateOptions {
-  /** FHIR resource names, e.g. ["Patient", "Observation"]. */
-  resources: string[];
+  /**
+   * FHIR resource names, e.g. ["Patient", "Observation"]. Optional when a
+   * `capability` statement is given (its declared resources are used); when
+   * both are set, generation is narrowed to the requested resources.
+   */
+  resources?: string[];
   fhirVersion: FhirVersion;
+  /**
+   * A parsed CapabilityStatement restricting generation to one server's
+   * declared support (resources, interactions, search params, operations).
+   * Use `loadCapabilityStatement` / `parseCapabilityStatement` to build it.
+   */
+  capability?: CapabilityLike;
   /**
    * IG package to apply profiles from: a local path (`.tgz` or unpacked
    * directory) loaded synchronously, or a pre-resolved IgContext (use the

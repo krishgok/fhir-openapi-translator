@@ -1,5 +1,6 @@
 import { buildRegistryFromSchemaJson } from "./backends/schemaJson.js";
 import { buildRegistryFromStructureDefinitions } from "./backends/structureDefinition.js";
+import type { Capability, ResourceCapability } from "./capability.js";
 import { convertSchema } from "./emit/schema.js";
 import { loadIgSync, type IgContext } from "./ig/package.js";
 import { applyProfile, buildCoreValueSetFallback } from "./ig/profile.js";
@@ -52,6 +53,23 @@ function assertFhirVersion(fhirVersion: string): asserts fhirVersion is FhirVers
   }
 }
 
+/** The FHIR version a CapabilityStatement fhirVersion string belongs to. */
+function assertCapabilityFhirVersion(capability: Capability, fhirVersion: FhirVersion): void {
+  const declared = capability.fhirVersion;
+  if (!declared) return; // statement omitted it; trust the caller's --fhir-version
+  const expectedMajor = FHIR_VERSION_NUMBERS[fhirVersion].split(".").slice(0, 2).join(".");
+  // R4 (4.0.x) and R4B (4.3.x) share major 4 but differ in minor; compare the
+  // major.minor prefix, tolerating the statement carrying only "4.0" etc.
+  const declaredPrefix = declared.split(".").slice(0, 2).join(".");
+  if (declaredPrefix && expectedMajor && declaredPrefix !== expectedMajor) {
+    throw new Error(
+      `CapabilityStatement targets FHIR ${declared}, but generation is for ` +
+        `${fhirVersion.toUpperCase()} (${FHIR_VERSION_NUMBERS[fhirVersion]}). ` +
+        `Set --fhir-version to match the server.`,
+    );
+  }
+}
+
 /** Resolves options.ig to an IgContext: a local path is loaded synchronously. */
 function resolveIg(options: GenerateOptions): IgContext {
   const ig = options.ig;
@@ -67,9 +85,6 @@ function resolveIg(options: GenerateOptions): IgContext {
  * full schema dependency closure plus the standard FHIR RESTful interactions.
  */
 export function generateOpenApi(options: GenerateOptions): OpenApiDocument {
-  if (!options.resources || options.resources.length === 0) {
-    throw new Error("At least one FHIR resource name is required");
-  }
   assertFhirVersion(options.fhirVersion);
   const openApiVersion = options.openApiVersion ?? "3.0.3";
   if (openApiVersion !== "3.0.3" && openApiVersion !== "3.1.0") {
@@ -78,10 +93,42 @@ export function generateOpenApi(options: GenerateOptions): OpenApiDocument {
 
   const registry = buildRegistry(options.fhirVersion, options.source ?? "schema-json");
 
+  // A CapabilityStatement restricts generation to one server's declared
+  // surface: which resources, interactions, search params, and operations.
+  const capability = options.capability as Capability | undefined;
+  const capabilityByResource = new Map<string, ResourceCapability>();
+  if (capability) {
+    assertCapabilityFhirVersion(capability, options.fhirVersion);
+    for (const cap of capability.resources) {
+      const match = registry.resourceNames.find(
+        (name) => name.toLowerCase() === cap.type.toLowerCase(),
+      );
+      // Skip resource types the FHIR version doesn't define (custom/unknown).
+      if (match) capabilityByResource.set(match, cap);
+    }
+  }
+
+  const requested = (options.resources ?? []).map((r) => resolveResourceName(registry, r));
+  if (requested.length === 0 && capabilityByResource.size === 0) {
+    throw new Error(
+      capability
+        ? "The CapabilityStatement declares no resources this FHIR version supports."
+        : "At least one FHIR resource name (or a --capability statement) is required",
+    );
+  }
+
   // Apply IG profiles (if any) into the registry, mapping each profiled base
   // resource to its emitted schema name. The base resource is auto-included.
   const schemaByResource = new Map<string, string>();
-  const resourceSet = new Set(options.resources.map((r) => resolveResourceName(registry, r)));
+  // In capability mode, the resource set is the statement's (optionally
+  // narrowed to the explicitly requested ones); otherwise it's the requested.
+  const resourceSet = new Set<string>(
+    capability
+      ? requested.length > 0
+        ? requested.filter((r) => capabilityByResource.has(r))
+        : [...capabilityByResource.keys()]
+      : requested,
+  );
   if (options.profiles?.length) {
     const ig = resolveIg(options);
     if (ig.fhirVersion !== options.fhirVersion) {
@@ -108,12 +155,20 @@ export function generateOpenApi(options: GenerateOptions): OpenApiDocument {
   const resources = [...resourceSet];
   const schemaFor = (resource: string) => schemaByResource.get(resource) ?? resource;
 
+  // Operations: in capability mode, emit exactly the operations each resource
+  // declares (mapped to known OperationDefinitions); otherwise --operations
+  // emits every applicable operation.
   const operationPaths: Record<string, JsonSchemaNode> = {};
   const operationRoots: string[] = [];
-  if (options.operations) {
+  if (capability || options.operations) {
     const knownResources = new Set(registry.resourceNames);
     for (const resource of resources) {
-      const result = buildOperationPaths(options.fhirVersion, resource, knownResources, schemaFor);
+      const cap = capabilityByResource.get(resource);
+      if (capability && (!cap || cap.operations.size === 0)) continue;
+      const result = buildOperationPaths(options.fhirVersion, resource, knownResources, {
+        schemaFor,
+        only: cap?.operations,
+      });
       Object.assign(operationPaths, result.paths);
       operationRoots.push(...result.extraSchemaRoots);
     }
@@ -136,7 +191,14 @@ export function generateOpenApi(options: GenerateOptions): OpenApiDocument {
 
   const paths: Record<string, JsonSchemaNode> = {};
   for (const resource of resources) {
-    Object.assign(paths, buildResourcePaths(options.fhirVersion, resource, schemaFor(resource)));
+    const cap = capabilityByResource.get(resource);
+    Object.assign(
+      paths,
+      buildResourcePaths(options.fhirVersion, resource, schemaFor(resource), {
+        interactions: cap?.interactions,
+        searchParamCodes: cap?.searchParamCodes,
+      }),
+    );
   }
   Object.assign(paths, operationPaths);
 

@@ -1,0 +1,43 @@
+{
+  "resourceType": "CapabilityStatement",
+  "status": "active",
+  "date": "2026-01-01",
+  "kind": "instance",
+  "fhirVersion": "4.0.1",
+  "format": ["json"],
+  "rest": [
+    {
+      "mode": "server",
+      "resource": [
+        {
+          "type": "Patient",
+          "interaction": [
+            { "code": "read" },
+            { "code": "search-type" }
+          ],
+          "searchParam": [
+            { "name": "birthdate", "type": "date" },
+            { "name": "name", "type": "string" }
+          ],
+          "operation": [
+            {
+              "name": "everything",
+              "definition": "http://hl7.org/fhir/OperationDefinition/Patient-everything"
+            }
+          ]
+        },
+        {
+          "type": "Observation",
+          "interaction": [
+            { "code": "read" },
+            { "code": "create" },
+            { "code": "search-type" }
+          ],
+          "searchParam": [
+            { "name": "code", "type": "token" }
+          ]
+        }
+      ]
+    }
+  ]
+}
