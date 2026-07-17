@@ -28,7 +28,8 @@
   },
   "files": [
     "dist",
-    "definitions"
+    "definitions",
+    "docs"
   ],
   "scripts": {
     "build": "tsup",
