@@ -2,6 +2,11 @@
 
 **Turn any FHIR resource into an OpenAPI spec — and codegen typed models in any language.**
 
+[![CI](https://github.com/krishgok/fhir-openapi-translator/actions/workflows/ci.yml/badge.svg)](https://github.com/krishgok/fhir-openapi-translator/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)](https://nodejs.org)
+[![FHIR R4 · R4B · R5](https://img.shields.io/badge/FHIR-R4%20%C2%B7%20R4B%20%C2%B7%20R5-orange.svg)](https://hl7.org/fhir)
+
 HAPI FHIR and Firely give Java/.NET teams great FHIR models. Everyone else — Go, Rust, Kotlin, PHP, C++, TypeScript — is stuck. But every language has an OpenAPI code generator. This tool bridges the gap: give it a resource name and a FHIR version, get back a clean, self-contained OpenAPI document ready for `openapi-generator`.
 
 ```sh
@@ -63,6 +68,19 @@ const doc = generateOpenApi({ resources: ["Patient"], fhirVersion: "r4" });
 - **Profiles / Implementation Guides** — apply US Core-style constraints from an IG package.
 - **CapabilityStatement-driven** — generate exactly what a specific server supports.
 - **Merge mode & drift guard** — keep generated specs alongside hand-written ones, and catch drift in CI.
+
+See [`examples/`](examples/) for worked walkthroughs (base resource, US Core profile, server-matched spec, CI drift guard).
+
+## How it compares
+
+|  | fhir-openapi-translator | HAPI / Firely | microsoft/fhir-codegen |
+|---|:---:|:---:|:---:|
+| Output | OpenAPI (→ any language) | Java / .NET models | many languages |
+| Runtime needed | none (offline CLI) | a running server / SDK | .NET |
+| US Core / IG profiles | ✅ | ✅ | partial |
+| Per-resource, codegen-tuned specs | ✅ | — | — |
+
+If you're on Java or .NET, use HAPI or Firely — they give richer, spec-aware models. This tool is for **everyone else**, and for feeding OpenAPI-native tooling (gateways, mock servers, contract tests).
 
 **→ Full CLI options, library API, codegen recipes, and limitations: [docs/REFERENCE.md](docs/REFERENCE.md).**
 

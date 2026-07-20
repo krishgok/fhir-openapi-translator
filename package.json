@@ -1,14 +1,25 @@
 {
   "name": "fhir-openapi-translator",
   "version": "0.1.0",
-  "description": "Generate OpenAPI specifications for HL7 FHIR resources by resource name and FHIR version, for model codegen in any language.",
+  "description": "Generate an OpenAPI (Swagger) spec for any FHIR resource (R4/R4B/R5) — for typed model & client codegen in any language. Supports US Core profiles, operations, and CapabilityStatements.",
   "keywords": [
     "fhir",
+    "fhir-to-openapi",
     "openapi",
     "swagger",
     "hl7",
+    "hl7-fhir",
     "codegen",
-    "healthcare"
+    "code-generation",
+    "fhir-codegen",
+    "us-core",
+    "structuredefinition",
+    "capabilitystatement",
+    "healthcare",
+    "healthcare-interoperability",
+    "openapi-generator",
+    "fhir-r4",
+    "fhir-r5"
   ],
   "license": "MIT",
   "type": "module",
