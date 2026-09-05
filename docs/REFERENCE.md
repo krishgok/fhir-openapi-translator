@@ -144,7 +144,7 @@ any size. If you do need Swagger UI on a large spec, `--exclude-narrative` and
 
 - **A FHIR validator.** Passing schema validation does *not* make a resource FHIR-conformant: FHIRPath invariants, terminology bindings, and profile constraints (slicing, must-support, cardinality refinements) are not fully represented in OpenAPI. Validate with a real FHIR validator (HAPI, the official validator, server-side `$validate`).
 - **A full profile / conformance engine.** `--profile` applies the *representable* profile constraints (see the table below), but slicing, extension slices, `pattern[x]`, FHIRPath invariants, and must-support are **not enforced** — they are surfaced as description notes and `x-fhir-constraints-omitted`, not as schema rules.
-- **A replacement for HAPI FHIR or Firely** if you are on Java/.NET — those give you richer, spec-aware models than any OpenAPI codegen can.
+- **A replacement for a full FHIR SDK.** HAPI FHIR and Firely offer richer, spec-aware models and conformance tooling than any OpenAPI codegen can; where you need that depth, use them alongside this rather than instead of it.
 - **XML payload handling.** Only the FHIR JSON representation is modeled.
 
 ## Profiles: what `--profile` applies

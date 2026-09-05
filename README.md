@@ -9,7 +9,7 @@
 
 ![Generating an OpenAPI spec for Patient and CarePlan on FHIR R4, then exploring it in Swagger UI](docs/demo.gif)
 
-HAPI FHIR and Firely give Java and .NET teams great FHIR models. Everyone else — Go, Rust, Kotlin, PHP, C++, TypeScript — is stuck. But *every* language has an OpenAPI generator. This tool bridges the gap: name a resource and a FHIR version, get a clean, self-contained OpenAPI document, offline.
+FHIR is defined in its own metadata format, but *every* language and API platform already speaks OpenAPI. This tool bridges the gap: name a resource and a FHIR version, get a clean, self-contained OpenAPI document — offline, ready to publish as a contract or hand to a code generator.
 
 ## Install
 
@@ -80,7 +80,7 @@ const doc = generateOpenApi({ resources: ["Patient"], fhirVersion: "r4" });
 | US Core / IG profiles | ✅ | ✅ | partial |
 | Per-resource, codegen-tuned specs | ✅ | — | — |
 
-On Java or .NET? Use HAPI or Firely — richer, spec-aware models. This is for **everyone else**, and for OpenAPI-native tooling (gateways, mocks, contract tests).
+Anyone can use this, whatever the stack. Reach for it when you need to **expose an OpenAPI contract to consumers**, **generate language-specific models**, or **call orchestrator-style FHIR endpoints**.
 
 ## Docs
 
