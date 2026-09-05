@@ -7,7 +7,7 @@
 [![Node](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)](https://nodejs.org)
 [![FHIR R4 · R4B · R5](https://img.shields.io/badge/FHIR-R4%20%C2%B7%20R4B%20%C2%B7%20R5-orange.svg)](https://hl7.org/fhir)
 
-![Generating an OpenAPI spec for six FHIR R4 resources and exploring it in Swagger UI](docs/demo.gif)
+![Generating an OpenAPI spec for Patient and CarePlan on FHIR R4, then exploring it in Swagger UI](docs/demo.gif)
 
 HAPI FHIR and Firely give Java and .NET teams great FHIR models. Everyone else — Go, Rust, Kotlin, PHP, C++, TypeScript — is stuck. But *every* language has an OpenAPI generator. This tool bridges the gap: name a resource and a FHIR version, get a clean, self-contained OpenAPI document, offline.
 

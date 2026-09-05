@@ -28,18 +28,15 @@ const OUT = path.join(ROOT, "docs", "demo.gif");
 const W = 960;
 const H = 600;
 
-const RESOURCES = [
-  "Patient",
-  "MedicationStatement",
-  "MedicationRequest",
-  "Appointment",
-  "Location",
-  "HealthcareService",
-];
-const COMMAND = `fhir-oas generate \\\n    ${RESOURCES.join(" ")} \\\n    --fhir-version r4 -o fhir-r4.openapi.yaml`;
+const RESOURCES = ["Patient", "CarePlan"];
+const OUTFILE = "patient-careplan.yaml";
+/** The resource opened up in the Swagger UI scene. */
+const FOCUS = "Patient";
+const COMMAND =
+  `fhir-oas generate ${RESOURCES.join(" ")} --fhir-version r4 -o ${OUTFILE}`;
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), "fhir-oas-demo-"));
-const specPath = path.join(work, "fhir-r4.openapi.json");
+const specPath = path.join(work, "demo.openapi.json");
 
 // --- 1. Generate the spec for real, and read its real shape -----------------
 console.log("Generating spec...");
@@ -100,6 +97,7 @@ function termHtml(body) {
 }
 
 const CMD_HTML = COMMAND.replace(/--[a-z-]+/g, (m) => `<span class="flag">${m}</span>`);
+
 const frames = [];
 // Set DEMO_FRAME_DIR to also dump each frame as a PNG (for reviewing the demo).
 const FRAME_DIR = process.env.DEMO_FRAME_DIR;
@@ -128,36 +126,31 @@ async function shot() {
 }
 
 console.log("Capturing terminal scene...");
-// Typing animation over the command text.
-const plain = COMMAND;
-const steps = [0, 10, 22, 34, 48, 62, 78, 95, 112, 128, plain.length];
+// Type the command out.
+const steps = [0, 8, 17, 26, 34, 43, 52, 60, 68, COMMAND.length];
 for (const n of steps) {
-  const typed = plain.slice(0, n);
-  const html = typed.replace(/--[a-z-]+/g, (m) => `<span class="flag">${m}</span>`);
+  const typed = COMMAND.slice(0, n).replace(/--[a-z-]+/g, (m) => `<span class="flag">${m}</span>`);
   await page.setContent(
-    termHtml(`<span class="p">$</span> <span class="cmd">${html}</span><span class="cur">_</span>`),
+    termHtml(`<span class="p">$</span> <span class="cmd">${typed}</span><span class="cur">_</span>`),
   );
-  push(await shot(), n === plain.length ? 60 : 55);
+  push(await shot(), 70);
 }
-// Hold on the complete command, then reveal output.
 await page.setContent(termHtml(`<span class="p">$</span> <span class="cmd">${CMD_HTML}</span>`));
-push(await shot(), 700);
+push(await shot(), 800);
 
-await page.setContent(
-  termHtml(
-    `<span class="p">$</span> <span class="cmd">${CMD_HTML}</span>\n\n<span class="ok">Wrote fhir-r4.openapi.yaml</span>`,
-  ),
-);
+const done = `<span class="p">$</span> <span class="cmd">${CMD_HTML}</span>`;
+await page.setContent(termHtml(`${done}\n\n<span class="ok">Wrote ${OUTFILE}</span>`));
 push(await shot(), 900);
 
 await page.setContent(
   termHtml(
-    `<span class="p">$</span> <span class="cmd">${CMD_HTML}</span>\n\n<span class="ok">Wrote fhir-r4.openapi.yaml</span>\n` +
-      `<span class="dim">  ${RESOURCES.length} resources · ${stats.schemas} schemas · ${stats.paths} paths · ${stats.operations} operations</span>\n` +
+    `${done}\n\n<span class="ok">Wrote ${OUTFILE}</span>\n` +
+      `<span class="dim">  ${RESOURCES.length} resources · ${stats.schemas} schemas · ` +
+      `${stats.paths} paths · ${stats.operations} operations</span>\n` +
       `<span class="dim">  OpenAPI 3.0.3 · FHIR R4 (4.0.1) · offline, no server needed</span>`,
   ),
 );
-push(await shot(), 1900);
+push(await shot(), 2100);
 
 // --- 3. Swagger UI scene ----------------------------------------------------
 console.log("Capturing Swagger UI scene...");
@@ -197,42 +190,50 @@ const port = server.address().port;
 await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "networkidle" });
 await page.waitForSelector(".opblock-tag", { timeout: 30000 });
 await page.addStyleTag({ content: "*{scroll-behavior:auto !important}" });
-await page.waitForTimeout(600);
-push(await shot(), 1700); // overview: the six resource tags
+await page.waitForTimeout(900);
+push(await shot(), 1700); // overview: the clinical resource tags
 
-// Expand the Patient tag to reveal its operations.
-await page.click('.opblock-tag[data-tag="Patient"]');
-await page.waitForSelector("#operations-Patient-readPatient", { timeout: 30000 });
-await page.waitForTimeout(700);
-push(await shot(), 1500);
-
-// Scroll through the rest of the Patient operations.
-await page.evaluate(() => window.scrollBy(0, 300));
+// Open one clinical resource and show its generated endpoints.
+await page.evaluate((tag) => {
+  document.querySelector(`.opblock-tag[data-tag="${tag}"]`)?.scrollIntoView({ block: "start" });
+}, FOCUS);
 await page.waitForTimeout(400);
+push(await shot(), 1000);
+await page.click(`.opblock-tag[data-tag="${FOCUS}"]`);
+await page.waitForSelector(`#operations-${FOCUS}-read${FOCUS}`, { timeout: 30000 });
+await page.evaluate((tag) => {
+  document.querySelector(`.opblock-tag[data-tag="${tag}"]`)?.scrollIntoView({ block: "start" });
+}, FOCUS);
+await page.waitForTimeout(700);
+push(await shot(), 1700);
+await page.evaluate(() => window.scrollBy(0, 300));
+await page.waitForTimeout(420);
 push(await shot(), 1500);
 
 // Collapse the tag and open the Schemas (models) section.
-await page.click('.opblock-tag[data-tag="Patient"]');
+await page.click(`.opblock-tag[data-tag="${FOCUS}"]`);
 await page.waitForTimeout(400);
 await page.click("section.models h4");
-await page.waitForTimeout(1200);
+// Wait for the schema list to render before reaching into it.
+await page.waitForSelector(`#model-${FOCUS}`, { timeout: 60000 });
+await page.waitForTimeout(800);
 await page.evaluate(() => {
   document.querySelector("section.models")?.scrollIntoView({ block: "start" });
 });
 await page.waitForTimeout(500);
-push(await shot(), 1700); // the generated model list
+push(await shot(), 1600); // the generated model list
 
-// Expand the Patient model to show its generated fields.
-await page.evaluate(() => {
-  document.querySelector("#model-Patient")?.scrollIntoView({ block: "start" });
-});
+// Expand the focused model to show its generated fields.
+await page.evaluate((tag) => {
+  document.querySelector(`#model-${tag}`)?.scrollIntoView({ block: "start" });
+}, FOCUS);
 await page.waitForTimeout(450);
-push(await shot(), 1200);
-await page.click("#model-Patient .model-toggle, #model-Patient .model-title");
-await page.waitForTimeout(1500);
-await page.evaluate(() => {
-  document.querySelector("#model-Patient")?.scrollIntoView({ block: "start" });
-});
+push(await shot(), 1100);
+await page.click(`#model-${FOCUS} .model-toggle, #model-${FOCUS} .model-title`);
+await page.waitForTimeout(1600);
+await page.evaluate((tag) => {
+  document.querySelector(`#model-${tag}`)?.scrollIntoView({ block: "start" });
+}, FOCUS);
 await page.waitForTimeout(500);
 push(await shot(), 1800);
 
