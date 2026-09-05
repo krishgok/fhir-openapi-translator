@@ -73,12 +73,12 @@ const doc = generateOpenApi({ resources: ["Patient"], fhirVersion: "r4" });
 
 ## Where it fits
 
-|  | fhir-openapi-translator | HAPI / Firely | microsoft/fhir-codegen |
-|---|:---:|:---:|:---:|
-| Output | OpenAPI (→ any language) | Java / .NET models | many languages |
-| Runtime needed | none (offline CLI) | a running server / SDK | .NET |
-| US Core / IG profiles | ✅ | ✅ | partial |
-| Per-resource, codegen-tuned specs | ✅ | — | — |
+|  | fhir-openapi-translator | HAPI / Firely |
+|---|:---:|:---:|
+| Output | OpenAPI (→ any language) | Java / .NET models |
+| Runtime needed | none (offline CLI) | a running server / SDK |
+| US Core / IG profiles | ✅ | ✅ |
+| Per-resource, codegen-tuned specs | ✅ | — |
 
 **Complements a FHIR SDK, doesn't replace it.** Keep HAPI or Firely for server-side models and conformance — this produces the OpenAPI contract around them: for consumers in any language, and for the tooling you already run (gateways, mock servers, contract tests).
 
