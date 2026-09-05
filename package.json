@@ -22,6 +22,15 @@
     "fhir-r5"
   ],
   "license": "MIT",
+  "author": "krishgok",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/krishgok/fhir-openapi-translator.git"
+  },
+  "homepage": "https://github.com/krishgok/fhir-openapi-translator#readme",
+  "bugs": {
+    "url": "https://github.com/krishgok/fhir-openapi-translator/issues"
+  },
   "type": "module",
   "engines": {
     "node": ">=20"
