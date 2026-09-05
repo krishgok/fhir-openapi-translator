@@ -7,6 +7,7 @@ Full CLI, library API, codegen recipes, and limitations. For a quick start see t
 - [CLI](#cli)
 - [Library API](#library-api)
 - [Codegen recipes](#codegen-recipes)
+- [Viewing generated specs](#viewing-generated-specs)
 - [What this is for — and what it is not](#what-this-is-for--and-what-it-is-not)
 - [Profiles: what `--profile` applies](#profiles-what---profile-applies)
 - [Assumptions and known limitations](#assumptions-and-known-limitations)
@@ -105,6 +106,31 @@ Generated specs are exercised against [openapi-generator](https://github.com/Ope
 - **typescript-fetch**: pass `--additional-properties=modelPropertyNaming=original`. FHIR represents extensions on primitive fields as sibling `_field` properties; the generator's default naming strips the underscore and produces colliding class members.
 - Large resources produce large model trees (a Patient R4 spec has ~80 schemas, a full Bundle-of-anything far more). If your generator or build struggles, use `--exclude-narrative` and `--max-depth` to shrink the graph.
 - `Bundle.entry.resource` (`ResourceList`) is narrowed to the resource types you requested. If your server returns other types in bundles (e.g. `_include`d resources you didn't generate), either add those resources to the generation, or treat unknown entries as opaque JSON.
+
+## Viewing generated specs
+
+Swagger UI is fine for a spec covering a handful of resources, but it renders
+every schema in the document eagerly. FHIR's schemas are large and mutually
+recursive, so it degrades sharply as the spec grows. Measured on specs from
+this tool:
+
+| Spec | Swagger UI behaviour |
+|---|---|
+| 2 resources (~73 schemas) | renders fine; models expand promptly |
+| 6 resources (~84 schemas) | renders, but expanding one operation blocks the page for ~90s |
+| 39 resources (~188 schemas) | the **Schemas** section never finished rendering (gave up after 5 minutes) |
+
+[Redoc](https://github.com/Redocly/redoc) renders lazily and copes with these
+specs far better. Prefer it for anything beyond a few resources:
+
+```sh
+npx @redocly/cli preview-docs fhir-r4.openapi.yaml
+```
+
+This is a *viewer* limitation, not a defect in the generated specs — they
+validate against the OpenAPI meta-schemas and feed code generators cleanly at
+any size. If you do need Swagger UI on a large spec, `--exclude-narrative` and
+`--max-depth` shrink the schema graph considerably.
 
 ## What this is for — and what it is not
 

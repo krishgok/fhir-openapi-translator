@@ -37,6 +37,7 @@ const COMMAND =
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), "fhir-oas-demo-"));
 const specPath = path.join(work, "demo.openapi.json");
+const yamlPath = path.join(work, OUTFILE);
 
 // --- 1. Generate the spec for real, and read its real shape -----------------
 console.log("Generating spec...");
@@ -52,6 +53,19 @@ execFileSync(
     "json",
     "-o",
     specPath,
+  ],
+  { stdio: "pipe" },
+);
+execFileSync(
+  "node",
+  [
+    path.join(ROOT, "dist/cli.js"),
+    "generate",
+    ...RESOURCES,
+    "--fhir-version",
+    "r4",
+    "-o",
+    yamlPath,
   ],
   { stdio: "pipe" },
 );
@@ -78,13 +92,16 @@ const TERM_CSS = `
   .dot { width:12px; height:12px; border-radius:50%; }
   .title { color:#8b949e; font-size:12.5px; margin-left:10px; letter-spacing:.2px; }
   pre { padding:22px 24px; color:#c9d1d9; font:14.5px/1.75 ui-monospace,SFMono-Regular,Menlo,monospace;
-        white-space:pre-wrap; min-height:${H - 200}px; }
+        white-space:pre; overflow:hidden; min-height:${H - 200}px; }
   .p { color:#58a6ff; font-weight:700; }
   .cmd { color:#e6edf3; }
   .flag { color:#d2a8ff; }
   .ok { color:#3fb950; }
   .dim { color:#8b949e; }
   .cur { background:#58a6ff; color:#58a6ff; border-radius:1px; }
+  .k { color:#79c0ff; }
+  .s { color:#a5d6ff; }
+  .d { color:#8b949e; }
 `;
 
 function termHtml(body) {
@@ -94,6 +111,23 @@ function termHtml(body) {
       <span class="dot" style="background:#27c93f"></span>
       <span class="title">fhir-openapi-translator</span></div>
     <pre>${body}</pre></div>`;
+}
+
+const esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/** Minimal YAML colouring: keys, quoted strings, list bullets. */
+function yamlHtml(text) {
+  return esc(text)
+    .split("\n")
+    .map((line) =>
+      line
+        .replace(/^(\s*)(- )?([\w./{}$_-]+):/, (_m, indent, dash, key) =>
+          `${indent}${dash ? `<span class="d">${dash}</span>` : ""}<span class="k">${key}</span>:`)
+        .replace(/^(\s*)- (?![\w./{}$_-]+:)(.*)$/, (_m, indent, rest) =>
+          `${indent}<span class="d">- </span>${rest}`)
+        .replace(/&quot;[^&]*&quot;/g, (m) => `<span class="s">${m}</span>`),
+    )
+    .join("\n");
 }
 
 const CMD_HTML = COMMAND.replace(/--[a-z-]+/g, (m) => `<span class="flag">${m}</span>`);
@@ -151,6 +185,34 @@ await page.setContent(
   ),
 );
 push(await shot(), 2100);
+
+// --- 2b. Raw YAML scene: the artifact itself, before any viewer ------------
+console.log("Capturing raw YAML scene...");
+const yamlText = fs.readFileSync(yamlPath, "utf8");
+const yamlLines = yamlText.split("\n");
+
+function shellScene(cmdText, output) {
+  const cmd = `<span class="p">$</span> <span class="cmd">${esc(cmdText)}</span>`;
+  return output === undefined ? cmd : `${cmd}\n${output}`;
+}
+
+// head: the top of the generated document.
+const headCmd = `head -14 ${OUTFILE}`;
+await page.setContent(termHtml(shellScene(headCmd) + `<span class="cur">_</span>`));
+push(await shot(), 500);
+await page.setContent(
+  termHtml(shellScene(headCmd, yamlHtml(yamlLines.slice(0, 14).join("\n")))),
+);
+push(await shot(), 2600);
+
+// grep: a required binding rendered as a typed enum, in the raw file.
+const grepCmd = `grep -A6 "gender:" ${OUTFILE} | head -7`;
+const genderStart = yamlLines.findIndex((l) => /^\s+gender:/.test(l));
+const genderBlock = yamlLines.slice(genderStart, genderStart + 7).join("\n");
+await page.setContent(termHtml(shellScene(grepCmd) + `<span class="cur">_</span>`));
+push(await shot(), 500);
+await page.setContent(termHtml(shellScene(grepCmd, yamlHtml(genderBlock))));
+push(await shot(), 2800);
 
 // --- 3. Swagger UI scene ----------------------------------------------------
 console.log("Capturing Swagger UI scene...");
@@ -215,7 +277,7 @@ await page.click(`.opblock-tag[data-tag="${FOCUS}"]`);
 await page.waitForTimeout(400);
 await page.click("section.models h4");
 // Wait for the schema list to render before reaching into it.
-await page.waitForSelector(`#model-${FOCUS}`, { timeout: 60000 });
+for (const m of RESOURCES) await page.waitForSelector(`#model-${m}`, { timeout: 60000 });
 await page.waitForTimeout(800);
 await page.evaluate(() => {
   document.querySelector("section.models")?.scrollIntoView({ block: "start" });
@@ -223,24 +285,27 @@ await page.evaluate(() => {
 await page.waitForTimeout(500);
 push(await shot(), 1600); // the generated model list
 
-// Expand the focused model to show its generated fields.
-await page.evaluate((tag) => {
-  document.querySelector(`#model-${tag}`)?.scrollIntoView({ block: "start" });
-}, FOCUS);
-await page.waitForTimeout(450);
-push(await shot(), 1100);
-await page.click(`#model-${FOCUS} .model-toggle, #model-${FOCUS} .model-title`);
-await page.waitForTimeout(1600);
-await page.evaluate((tag) => {
-  document.querySelector(`#model-${tag}`)?.scrollIntoView({ block: "start" });
-}, FOCUS);
-await page.waitForTimeout(500);
-push(await shot(), 1800);
+// Expand each generated resource model to show its fields.
+for (const model of RESOURCES.slice().sort()) {
+  await page.evaluate((m) => {
+    document.querySelector(`#model-${m}`)?.scrollIntoView({ block: "start" });
+  }, model);
+  await page.waitForTimeout(450);
+  push(await shot(), 1000);
 
-for (const dy of [270, 270, 270]) {
-  await page.evaluate((y) => window.scrollBy(0, y), dy);
-  await page.waitForTimeout(500);
-  push(await shot(), 1400);
+  await page.click(`#model-${model} .model-toggle, #model-${model} .model-title`);
+  await page.waitForTimeout(1300);
+  await page.evaluate((m) => {
+    document.querySelector(`#model-${m}`)?.scrollIntoView({ block: "start" });
+  }, model);
+  await page.waitForTimeout(450);
+  push(await shot(), 1800);
+
+  for (const dy of [270, 270]) {
+    await page.evaluate((y) => window.scrollBy(0, y), dy);
+    await page.waitForTimeout(480);
+    push(await shot(), 1400);
+  }
 }
 push(await shot(), 2400); // final hold
 
