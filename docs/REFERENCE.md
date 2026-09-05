@@ -136,7 +136,9 @@ any size. If you do need Swagger UI on a large spec, `--exclude-narrative` and
 
 **Intended use**
 
-- Codegen typed FHIR models and API clients in languages without a mature FHIR SDK (Go, Rust, Kotlin, PHP, C++, ...).
+- Generate typed FHIR models and API clients in any language — especially where no mature FHIR SDK exists (Go, Rust, Kotlin, PHP, C++, ...).
+- Publish an OpenAPI contract to the consumers of your FHIR API, so they integrate against a spec rather than prose.
+- Build typed clients for orchestrator-style FHIR endpoints your services call.
 - Feed API gateways, contract-testing tools, mock servers, and documentation portals that speak OpenAPI.
 - Commit the generated spec next to your service and regenerate on FHIR version bumps; merge mode keeps hand-written spec content intact.
 

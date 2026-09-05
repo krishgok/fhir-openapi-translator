@@ -71,7 +71,7 @@ const doc = generateOpenApi({ resources: ["Patient"], fhirVersion: "r4" });
 - **CapabilityStatement-driven** — generate exactly what a server supports.
 - **Merge mode & drift guard** — coexist with hand-written specs, catch drift in CI.
 
-## How it compares
+## Where it fits
 
 |  | fhir-openapi-translator | HAPI / Firely | microsoft/fhir-codegen |
 |---|:---:|:---:|:---:|
@@ -80,7 +80,7 @@ const doc = generateOpenApi({ resources: ["Patient"], fhirVersion: "r4" });
 | US Core / IG profiles | ✅ | ✅ | partial |
 | Per-resource, codegen-tuned specs | ✅ | — | — |
 
-Anyone can use this, whatever the stack. Reach for it when you need to **expose an OpenAPI contract to consumers**, **generate language-specific models**, or **call orchestrator-style FHIR endpoints**.
+**Complements a FHIR SDK, doesn't replace it.** Keep HAPI or Firely for server-side models and conformance — this produces the OpenAPI contract around them: for consumers in any language, and for the tooling you already run (gateways, mock servers, contract tests).
 
 ## Docs
 
