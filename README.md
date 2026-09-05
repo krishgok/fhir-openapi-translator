@@ -9,7 +9,7 @@
 
 ![Generating an OpenAPI spec for Patient and CarePlan on FHIR R4, then exploring it in Swagger UI](docs/demo.gif)
 
-FHIR is defined in its own metadata format, but *every* language and API platform already speaks OpenAPI. This tool bridges the gap: name a resource and a FHIR version, get a clean, self-contained OpenAPI document — offline, ready to publish as a contract or hand to a code generator.
+HAPI FHIR and Firely give Java/.NET teams great FHIR models. Everyone else — Go, Rust, Kotlin, PHP, C++, TypeScript — is stuck. But every language has an OpenAPI code generator. This tool bridges the gap: give it a resource name and a FHIR version, get back a clean, self-contained OpenAPI document ready for `openapi-generator`.
 
 ## Install
 
@@ -30,6 +30,8 @@ npx @openapitools/openapi-generator-cli generate \
   -i patient.yaml -g typescript-fetch -o ./client \
   --additional-properties=modelPropertyNaming=original
 ```
+
+That's a complete spec — the `Patient` schema, its full dependency closure, the standard REST interactions, and every official search parameter — that any OpenAPI generator turns into typed models and clients.
 
 ## Usage
 
