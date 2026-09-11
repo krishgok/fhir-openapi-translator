@@ -2,6 +2,8 @@
 
 **Turn any FHIR resource into an OpenAPI spec — and generate typed models in any language.**
 
+[![npm version](https://img.shields.io/npm/v/fhir-openapi-translator.svg)](https://www.npmjs.com/package/fhir-openapi-translator)
+[![npm downloads](https://img.shields.io/npm/dm/fhir-openapi-translator.svg)](https://www.npmjs.com/package/fhir-openapi-translator)
 [![CI](https://github.com/krishgok/fhir-openapi-translator/actions/workflows/ci.yml/badge.svg)](https://github.com/krishgok/fhir-openapi-translator/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)](https://nodejs.org)
@@ -14,8 +16,11 @@ HAPI FHIR and Firely give Java/.NET teams great FHIR models. Everyone else — G
 ## Install
 
 ```sh
-npm install fhir-openapi-translator     # library + `fhir-oas` CLI
+npm install -g fhir-openapi-translator   # `fhir-oas` on your PATH
+npm install fhir-openapi-translator      # or as a library dependency
 ```
+
+Or run it without installing: `npx fhir-oas generate Patient --fhir-version r4`
 
 Node.js ≥ 20. FHIR definitions ship with the package — no network, no server.
 
