@@ -1,0 +1,8 @@
+{
+  "name": "example.fhir.r5.minimal",
+  "version": "0.1.0",
+  "fhir-version-list": ["5.0.0"],
+  "fhirVersions": ["5.0.0"],
+  "type": "IG",
+  "description": "Hand-built minimal R5 IG fixture. Exercises profile constraints that no real profile in the US Core fixture happens to use (max:0, fixed[x] on a directly emitted element), and proves profile support is not R4-specific."
+}
