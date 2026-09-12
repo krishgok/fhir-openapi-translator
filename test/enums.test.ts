@@ -10,6 +10,36 @@ describe("required-binding enums", () => {
     expect([...gender.enum].sort()).toEqual([...GENDER_CODES].sort());
   });
 
+  // Regression: HL7 stopped inlining enums in fhir.schema.json after R4, so the
+  // default backend silently emitted plain code refs for R4B/R5 while only R4
+  // was ever asserted here. Both backends must agree, on every version.
+  it("both backends resolve the same enums on every FHIR version", () => {
+    for (const fhirVersion of ["r4", "r4b", "r5"] as const) {
+      for (const source of ["schema-json", "structure-def"] as const) {
+        const label = `${fhirVersion}/${source}`;
+
+        const patient = generateOpenApi({
+          resources: ["Patient"],
+          fhirVersion,
+          source,
+        }) as any;
+        expect([...patient.components.schemas.Patient.properties.gender.enum].sort(), label).toEqual(
+          [...GENDER_CODES].sort(),
+        );
+
+        const observation = generateOpenApi({
+          resources: ["Observation"],
+          fhirVersion,
+          source,
+        }) as any;
+        const status = observation.components.schemas.Observation.properties.status;
+        expect(status.enum, label).toBeDefined();
+        expect(status.enum, label).toContain("final");
+        expect(status.$ref, label).toBeUndefined();
+      }
+    }
+  });
+
   it("structure-def backend resolves the same enums from ValueSets", () => {
     for (const fhirVersion of ["r4", "r4b", "r5"] as const) {
       const doc = generateOpenApi({
