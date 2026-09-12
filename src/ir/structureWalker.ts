@@ -79,7 +79,12 @@ function buildElementTree(sd: MinStructureDefinition): ElementNode | undefined {
  * within the emitted profile schemas.
  */
 function contentReferenceName(reference: string, sd: MinStructureDefinition, rootName: string): string {
-  const path = reference.replace(/^#/, "");
+  // Two forms occur: the core definitions use "#Observation.referenceRange",
+  // while IG snapshot generators emit the absolute canonical
+  // "http://hl7.org/fhir/StructureDefinition/Observation#Observation.referenceRange".
+  // Only the fragment names the element path.
+  const hash = reference.lastIndexOf("#");
+  const path = hash >= 0 ? reference.slice(hash + 1) : reference;
   const [root, ...rest] = path.split(".");
   if (rest.length === 0) return root ?? path;
   const prefix = root === (sd.type ?? sd.name) ? rootName : (root ?? "");
