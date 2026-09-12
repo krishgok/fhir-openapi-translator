@@ -1,0 +1,23 @@
+{
+  "resourceType": "StructureDefinition",
+  "id": "minimal-r5-patient",
+  "url": "http://example.org/fhir/StructureDefinition/minimal-r5-patient",
+  "name": "MinimalR5Patient",
+  "status": "active",
+  "fhirVersion": "5.0.0",
+  "kind": "resource",
+  "abstract": false,
+  "type": "Patient",
+  "baseDefinition": "http://hl7.org/fhir/StructureDefinition/Patient",
+  "derivation": "constraint",
+  "snapshot": {
+    "element": [
+      { "path": "Patient", "min": 0, "max": "*", "definition": "Minimal R5 patient profile fixture." },
+      { "path": "Patient.identifier", "min": 1, "max": "*", "short": "Tightened to required", "type": [{ "code": "Identifier" }] },
+      { "path": "Patient.active", "min": 1, "max": "1", "short": "Required and pinned", "type": [{ "code": "boolean" }], "fixedBoolean": true },
+      { "path": "Patient.gender", "min": 0, "max": "1", "short": "Required binding", "type": [{ "code": "code" }], "binding": { "strength": "required", "valueSet": "http://hl7.org/fhir/ValueSet/administrative-gender" } },
+      { "path": "Patient.birthDate", "min": 0, "max": "0", "short": "Constrained out", "type": [{ "code": "date" }] },
+      { "path": "Patient.name", "min": 0, "max": "*", "short": "Must support", "type": [{ "code": "HumanName" }], "mustSupport": true }
+    ]
+  }
+}
