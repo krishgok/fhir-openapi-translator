@@ -72,6 +72,36 @@ describe("profile application (US Core Patient fixture)", () => {
       expect(result.valid).toBe(true);
     }
   });
+
+  // Regression: only us-core-patient was ever exercised. us-core-blood-pressure
+  // carries contentReferences in the absolute canonical form that IG snapshot
+  // generators emit ("http://.../Observation#Observation.referenceRange"),
+  // which failed generation outright. Every profile in the package must apply.
+  it("applies every resource profile in the package", () => {
+    const ig = loadIgSync(IG_DIR);
+    expect(ig.profiles.length).toBeGreaterThan(1);
+
+    for (const profile of ig.profiles) {
+      const doc = generateOpenApi({
+        resources: [profile.type],
+        fhirVersion: "r4",
+        ig: IG_DIR,
+        profiles: [profile.id ?? profile.name],
+      }) as any;
+
+      const schemaName = Object.keys(doc.components.schemas).find(
+        (n) => doc.components.schemas[n]["x-fhir-profile"] === profile.url,
+      );
+      expect(schemaName, `${profile.id}: no schema carrying x-fhir-profile`).toBeDefined();
+      // Every $ref in the document must resolve to an emitted schema.
+      const refs = [...JSON.stringify(doc).matchAll(/"#\/components\/schemas\/([^"]+)"/g)]
+        .map((m) => m[1])
+        .filter((r): r is string => !!r);
+      for (const ref of new Set(refs)) {
+        expect(doc.components.schemas[ref], `${profile.id}: dangling $ref ${ref}`).toBeDefined();
+      }
+    }
+  });
 });
 
 describe("IG loading", () => {

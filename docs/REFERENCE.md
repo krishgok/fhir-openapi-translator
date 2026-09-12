@@ -159,9 +159,19 @@ Given `--ig <package> --profile <id>`, the profile snapshot is turned into a sch
 | `max: "0"` | property omitted |
 | `max: "1"` on a base array | scalar instead of array |
 | required binding, resolvable ValueSet (IG-local, then vendored core; ≤150 codes) | inline `enum` |
-| `fixed[x]` | `const` (3.1) / single-value `enum` (3.0.3) |
+| `fixed[x]` on an element emitted as its own property | `const` (3.1) / single-value `enum` (3.0.3) |
+| `fixed[x]` **inside** a datatype or slice (e.g. `Observation.category.coding.code`) | *not applied* — see below |
 | choice-type narrowing | only the permitted `value[x]` expansions emitted |
 | `pattern[x]`, slicing, invariants, must-support | *not enforced* — noted in `description` + `x-fhir-constraints-omitted` |
+
+Note on `fixed[x]`: real IGs usually pin values at paths *inside* a datatype
+(`Observation.category.coding.code`) or inside a slice, rather than on a
+resource element directly. Those datatypes are emitted once as shared schemas
+and referenced with `$ref`, so a constraint that applies to one profile's use
+of `CodeableConcept` cannot be written into the shared `CodeableConcept`
+schema. Such fixed values are therefore **not** represented — US Core Blood
+Pressure, for example, declares six and none appear as `const`. Only fixed
+values on elements the profile emits as their own property are applied.
 
 The IG package is a local `.tgz` / unpacked directory, or a `name@version` coordinate fetched from `packages.fhir.org` and cached under `~/.fhir-oas/packages`. Profiles must ship a snapshot (differential-only packages error); the package FHIR version must match `--fhir-version`; only the public registry is supported (no auth).
 
