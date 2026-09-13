@@ -42,9 +42,24 @@ function convertNode(node: unknown, target: OpenApiVersion, options: ConvertOpti
     switch (key) {
       case "$schema":
       case "$comment":
+      // Draft-04/06 schema keywords. These are only keywords at schema-node
+      // level: inside `properties` the same names are FHIR element names, and
+      // nearly every FHIR element has an `id`. See the "properties" case.
       case "id":
       case "$id":
         break;
+      case "properties": {
+        // Keys here are property names, not schema keywords, so they are
+        // preserved verbatim and only their values converted.
+        const converted: JsonSchemaNode = {};
+        for (const [propertyName, propertySchema] of Object.entries(
+          (value ?? {}) as Record<string, unknown>,
+        )) {
+          converted[propertyName] = convertNode(propertySchema, target, options);
+        }
+        out.properties = converted;
+        break;
+      }
       case "$ref":
         out.$ref =
           typeof value === "string" && value.startsWith(DEFINITIONS_REF)
