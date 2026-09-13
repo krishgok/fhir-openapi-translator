@@ -34,19 +34,18 @@ a release.
       `ERR_PACKAGE_PATH_NOT_EXPORTED`. A legitimate choice, but some bundlers
       and version-introspection scripts reach for it. Add the subpath export
       if anyone hits it.
-- [ ] **GitHub release for `v0.1.1`** — the tag is pushed and points at
-      `main`, but no release exists. Draft notes were prepared; regenerate
-      from `CHANGELOG.md` if lost. The GitHub MCP server exposes no
-      create/update release tool, so this must be done in the web UI.
-- [ ] **Repo Website field is empty** — should point at
-      https://www.npmjs.com/package/fhir-openapi-translator
-- [ ] **npm downloads badge** renders blank. Expected to self-resolve once the
-      package has download history; revisit if still blank well after 0.1.1.
 - [ ] **Community launch, both drafted and unsent**: a chat.fhir.org (Zulip)
       announcement, and a `fhir-fuel/awesome-FHIR` PR adding an entry under
       its empty `JSON Schema` section. The awesome-FHIR PR must come from the
-      maintainer's own account — agent sessions here are scoped to
-      `krishgok/fhir-openapi-translator` only.
+      maintainer's own account (see Environment notes).
+
+### Environment notes
+
+- The GitHub MCP server here exposes only **read** tools for releases
+  (`get_release_by_tag`, `list_releases`) — no create or update. Release notes
+  must be drafted here and pasted in the web UI.
+- Agent sessions are scoped to `krishgok/fhir-openapi-translator`. Anything
+  touching another repo has to come from the maintainer's own account.
 
 ### Not an issue (checked, do not re-open)
 
