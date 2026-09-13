@@ -1,6 +1,6 @@
 {
   "name": "fhir-openapi-translator",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Generate an OpenAPI (Swagger) spec for any FHIR resource (R4/R4B/R5) — for typed model & client codegen in any language. Supports US Core profiles, operations, and CapabilityStatements.",
   "keywords": [
     "fhir",
@@ -49,7 +49,8 @@
   "files": [
     "dist",
     "definitions",
-    "docs"
+    "docs",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsup",
