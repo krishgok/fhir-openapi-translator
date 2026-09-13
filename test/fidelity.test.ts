@@ -54,6 +54,9 @@ const SAMPLE_RESOURCES = [
   "Subscription",
   "MessageHeader",
   "AuditEvent",
+  "Composition",
+  "ConceptMap",
+  "QuestionnaireResponse",
   // Base / administration: the entities everything else points at
   "Patient",
   "Practitioner",
@@ -64,6 +67,7 @@ const SAMPLE_RESOURCES = [
   "Appointment",
   "Device",
   "Substance",
+  "EpisodeOfCare",
   // Clinical: summary, diagnostics, medications, care provision
   "Observation",
   "Condition",
@@ -72,17 +76,23 @@ const SAMPLE_RESOURCES = [
   "DiagnosticReport",
   "Immunization",
   "MedicationRequest",
+  "MedicationStatement",
+  "MedicationDispense",
+  "ServiceRequest",
+  "CareTeam",
   "Specimen",
   // Financial
   "Claim",
   "Coverage",
   "ExplanationOfBenefit",
   "Account",
+  "InsurancePlan",
   // Specialized: definitional artifacts, quality, testing, research
   "ResearchStudy",
   "Measure",
   "TestScript",
   "Questionnaire",
+  "ActivityDefinition",
   "Task",
 ] as const;
 
@@ -295,7 +305,7 @@ describe("fidelity: generated schemas match the FHIR definitions", () => {
     }
 
     expect(problems).toEqual([]);
-    // Guard the guard: these counts are ~3600 and ~840 today.
+    // Guard the guard: these counts are ~4170 and ~940 today.
     expect(nestedChecked).toBeGreaterThan(1000);
     expect(siblingsChecked).toBeGreaterThan(200);
   });
