@@ -43,6 +43,19 @@ export interface IgContextLike {
   resolveValueSet: (valueSetUrl: string) => string[] | undefined;
 }
 
+/** Preset selections accepted by `--search-params`. */
+export type SearchParamPreset = "all" | "minimal" | "none";
+
+/**
+ * Which resource-specific search parameters to emit. A `default` applies to
+ * every resource; `byResource` overrides it per resource. The common result
+ * parameters (`_id`, `_count`, ...) are always emitted regardless.
+ */
+export interface SearchParamSelection {
+  default?: SearchParamPreset | ReadonlySet<string>;
+  byResource?: ReadonlyMap<string, SearchParamPreset | ReadonlySet<string>>;
+}
+
 /** A parsed CapabilityStatement (see capability.ts). */
 export interface CapabilityLike {
   fhirVersion?: string;
@@ -94,6 +107,14 @@ export interface GenerateOptions {
   /** Override the generated `info.title`. */
   title?: string;
   trim?: TrimOptions;
+  /**
+   * Restrict which resource-specific search parameters are emitted. Servers
+   * commonly index only a subset, and every indexed parameter costs storage
+   * and write throughput; this keeps the published contract matched to what a
+   * deployment actually supports. Combined with `capability`, the two narrow
+   * each other (the intersection is emitted).
+   */
+  searchParams?: SearchParamSelection;
 }
 
 /** A JSON-Schema-like node. Kept loose: definitions come from vendored files. */

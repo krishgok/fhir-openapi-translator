@@ -7,6 +7,7 @@ import { applyProfile, buildCoreValueSetFallback } from "./ig/profile.js";
 import { extractClosure, type DefinitionRegistry } from "./ir/registry.js";
 import { buildOperationPaths } from "./operations.js";
 import { buildResourcePaths, commonSearchParameterComponents } from "./paths.js";
+import { resolveSearchParamCodes } from "./searchParams.js";
 import {
   FHIR_VERSION_NUMBERS,
   FHIR_VERSIONS,
@@ -192,11 +193,18 @@ export function generateOpenApi(options: GenerateOptions): OpenApiDocument {
   const paths: Record<string, JsonSchemaNode> = {};
   for (const resource of resources) {
     const cap = capabilityByResource.get(resource);
+    // A CapabilityStatement says what the server supports; --search-params
+    // narrows further. With both, emit only what satisfies each.
+    const selected = resolveSearchParamCodes(options.searchParams, options.fhirVersion, resource);
+    const searchParamCodes =
+      cap?.searchParamCodes && selected
+        ? new Set([...selected].filter((code) => cap.searchParamCodes.has(code)))
+        : (selected ?? cap?.searchParamCodes);
     Object.assign(
       paths,
       buildResourcePaths(options.fhirVersion, resource, schemaFor(resource), {
         interactions: cap?.interactions,
-        searchParamCodes: cap?.searchParamCodes,
+        searchParamCodes,
       }),
     );
   }

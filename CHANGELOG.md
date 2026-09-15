@@ -4,6 +4,36 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `--search-params` limits which resource-specific search parameters are
+  emitted: a preset (`all`, `minimal`, `none`), an explicit code list
+  (`code,date,subject`), or per-resource (`Patient:name,birthdate`). Unknown
+  codes are an error rather than being silently dropped. Combines with
+  `--capability` by intersection. The common result parameters (`_id`,
+  `_count`, ...) are always emitted.
+- `x-fhir-search-values` on token search parameters bound to a required
+  ValueSet, and `x-fhir-search-prefixes` on `number`/`date`/`quantity`
+  parameters, listing the comparison prefixes (`eq`, `ne`, `gt`, `lt`, `ge`,
+  `le`, `sa`, `eb`, `ap`) their values may carry. Both are metadata rather than
+  schema constraints: an `enum` would reject the comma-OR, `system|code` and
+  `:modifier` forms that FHIR search permits.
+
+### Changed
+
+- Search parameter descriptions are now derived from the definitions rather
+  than passed through from HL7's prose, which is not uniform — `Encounter-status`
+  spelled its codes out while `Observation-status` did not, though both are
+  token parameters over a required binding. Every parameter of a given kind now
+  reads the same way, and reports the codes its own FHIR version defines.
+- Search parameters shared across resources carry a union expression
+  (`Patient.gender | Person.gender | ...`); the branch matching the resource
+  being generated is now resolved, so `MedicationRequest.status` and
+  `MedicationDispense.status` each report their own code list. Previously such
+  parameters were left unenumerated entirely.
+
 ## [0.1.1] - 2026-09-13
 
 Three correctness fixes. Specs generated with 0.1.0 should be regenerated:

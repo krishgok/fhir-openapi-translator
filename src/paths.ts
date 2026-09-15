@@ -1,4 +1,5 @@
 import { loadSearchParameters } from "./definitions.js";
+import { prefixesFor, searchParamCodes } from "./searchParams.js";
 import type { FhirVersion, JsonSchemaNode } from "./types.js";
 
 const FHIR_JSON = "application/fhir+json";
@@ -108,6 +109,51 @@ export interface ResourcePathOptions {
   searchParamCodes?: ReadonlySet<string>;
 }
 
+/**
+ * True when a description is nothing but a code list, e.g. Encounter-status's
+ * "planned | arrived | triaged | in-progress | onleave | finished | cancelled +".
+ * HL7 writes these by hand and they drift from the binding: the R4 example
+ * omits `entered-in-error` and `unknown`, hinting at them with a trailing "+".
+ * Such a description is replaced by the derived list rather than appended to,
+ * so the codes are not reported twice in two different sets.
+ */
+function isCodeListDescription(description: string): boolean {
+  return description.includes("|") && /^[A-Za-z0-9\-.\s|+]+$/.test(description);
+}
+
+/**
+ * Describes a search parameter consistently, whatever HL7's own prose does.
+ *
+ * SearchParameter.description is written per parameter by different HL7 work
+ * groups and is not uniform: Encounter-status spells its codes out,
+ * Observation-status does not ("The status of the observation"), though both
+ * are token parameters over a required binding. The accepted codes and
+ * prefixes are therefore derived from the definitions, so every parameter of a
+ * given kind reads the same way on every FHIR version.
+ */
+function describeSearchParameter(
+  description: string,
+  codes: readonly string[] | undefined,
+  prefixes: readonly string[] | undefined,
+): string {
+  let base = description.trim();
+  if (codes?.length && isCodeListDescription(base)) base = "";
+
+  const notes: string[] = [];
+  if (codes?.length) notes.push(`Accepted values: ${codes.join(" | ")}.`);
+  if (prefixes?.length) {
+    notes.push(`Values may carry a comparison prefix (${prefixes.join(", ")}), e.g. ge2021-01-01.`);
+  }
+  if (notes.length === 0) return base;
+  if (base.length === 0) return notes.join(" ");
+
+  // Several descriptions are multi-line markdown listing every resource a
+  // shared parameter covers. Appending inline there would read as part of the
+  // last bullet, so keep the note in its own paragraph.
+  const separator = base.includes("\n") ? "\n\n" : /[.?!]$/.test(base) ? " " : ". ";
+  return `${base}${separator}${notes.join(" ")}`;
+}
+
 function resourceSearchParameters(
   fhirVersion: FhirVersion,
   resource: string,
@@ -116,15 +162,24 @@ function resourceSearchParameters(
   return loadSearchParameters(fhirVersion)
     .filter((sp) => sp.base.includes(resource) && (!only || only.has(sp.code)))
     .sort((a, b) => a.code.localeCompare(b.code))
-    .map((sp) => ({
-      name: sp.code,
-      in: "query",
-      required: false,
-      description: sp.description,
-      // FHIR search values carry prefixes and modifiers, so all are strings.
-      schema: { type: "string" },
-      "x-fhir-search-type": sp.type,
-    }));
+    .map((sp) => {
+      const codes = searchParamCodes(fhirVersion, resource, sp.type, sp.expression);
+      const prefixes = prefixesFor(sp.type);
+      return {
+        name: sp.code,
+        in: "query",
+        required: false,
+        description: describeSearchParameter(sp.description ?? "", codes, prefixes),
+        // FHIR search values carry prefixes and modifiers, so all are strings.
+        // The accepted values are advertised via x-fhir-search-values rather
+        // than `enum`, which would reject the comma-OR (`status=final,amended`),
+        // system|code and `:modifier` forms that FHIR search permits.
+        schema: { type: "string" },
+        "x-fhir-search-type": sp.type,
+        ...(codes?.length ? { "x-fhir-search-values": codes } : {}),
+        ...(prefixes?.length ? { "x-fhir-search-prefixes": prefixes } : {}),
+      };
+    });
 }
 
 const historyParameters = () => [
