@@ -2,6 +2,7 @@
 import { Command, Option } from "commander";
 import fs from "node:fs";
 import { generateOpenApi, listResources } from "./generate.js";
+import { parseSearchParamSpec } from "./searchParams.js";
 import { loadCapabilityStatement, type Capability } from "./capability.js";
 import { loadIg, type IgContext } from "./ig/package.js";
 import { buildCoreValueSetFallback } from "./ig/profile.js";
@@ -62,6 +63,11 @@ function addGenerationOptions(command: Command): Command {
       "profile id, name, or canonical URL to apply to its base resource (requires --ig)",
     )
     .option(
+      "--search-params <spec...>",
+      "limit resource-specific search parameters: a preset (all, minimal, none), " +
+        "a code list (code,date,subject), or per-resource (Patient:name,birthdate)",
+    )
+    .option(
       "--capability <source>",
       "CapabilityStatement file or server base/metadata URL: emit only its declared surface",
     );
@@ -81,6 +87,7 @@ interface SharedCliOptions {
   ig?: string;
   profile?: string[];
   capability?: string;
+  searchParams?: string[];
 }
 
 /**
@@ -122,6 +129,7 @@ async function toGenerateOptions(
     ig,
     profiles: opts.profile,
     capability,
+    searchParams: opts.searchParams ? parseSearchParamSpec(opts.searchParams) : undefined,
     trim: {
       excludeNarrative: opts.excludeNarrative,
       maxDepth: opts.maxDepth,
