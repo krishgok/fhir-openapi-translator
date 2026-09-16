@@ -49,11 +49,12 @@ fhir-oas generate Patient -f r4 --ig hl7.fhir.us.core@5.0.1 --profile us-core-pa
 # List the profiles in an IG package
 fhir-oas list --ig ./hl7.fhir.us.core-5.0.1.tgz
 
-# Limit the search parameters: a preset, a code list, or per-resource
-fhir-oas generate Observation -f r4 --search-params minimal
-fhir-oas generate Observation -f r4 --search-params code,date,subject
+# Limit the search parameters. Observation defines 38 on R4:
+fhir-oas generate Observation -f r4 --search-params none      # -> 0
+fhir-oas generate Observation -f r4 --search-params minimal   # -> 8, a fixed common core
+fhir-oas generate Observation -f r4 --search-params code,date # -> exactly the 2 you name
 fhir-oas generate Patient Observation -f r4 \
-  --search-params Patient:name,birthdate Observation:code,date
+  --search-params Patient:name,birthdate Observation:code,date   # per resource
 
 # Match a specific server's declared surface (resources, interactions, search params, operations)
 fhir-oas generate -f r4 --capability https://server.example.org/fhir   # appends /metadata
@@ -189,21 +190,41 @@ support tickets. `--search-params` narrows what is emitted:
 
 ```sh
 fhir-oas generate Observation -f r4 --search-params none      # none at all
-fhir-oas generate Observation -f r4 --search-params minimal   # a common core
-fhir-oas generate Observation -f r4 --search-params code,date # exactly these
+fhir-oas generate Observation -f r4 --search-params minimal   # the common core below
+fhir-oas generate Observation -f r4 --search-params code,date # exactly the codes you name
 fhir-oas generate Patient Observation -f r4 \
   --search-params Patient:name,birthdate Observation:code,date
 ```
+
+A code list is taken literally — it is _your_ list, not a suggested one, and
+nothing is added to it. Name every parameter you want; there is no shorthand
+for "these plus the usual ones".
 
 An unscoped selection applies to every resource; `Resource:codes` overrides it
 for one. Unknown codes are an error rather than being dropped silently. The
 common result parameters (`_id`, `_count`, `_sort`, `_include`, ...) are always
 emitted.
 
-`minimal` keeps whichever of `identifier`, `status`, `patient`, `subject`,
-`encounter`, `code`, `category`, `date`, `type`, `url` and `name` the resource
-actually defines. It is a convenience, deliberately opinionated; the explicit
-list is the precise tool.
+`minimal` is the one curated selection. It keeps whichever of these the
+resource actually defines — the parameters most servers index regardless of
+resource type:
+
+`identifier`, `status`, `patient`, `subject`, `encounter`, `code`, `category`,
+`date`, `type`, `url`, `name`
+
+On R4 that takes `Observation` from 38 parameters to 8 (`category`, `code`,
+`date`, `encounter`, `identifier`, `patient`, `status`, `subject`) and
+`Patient` from 23 to 2 (`identifier`, `name`). It is a convenience and it is
+deliberately opinionated: there is no marker in FHIR for "commonly indexed", so
+the list is a judgement call, and it is fixed rather than derived. When the
+selection matters, name the codes explicitly or derive them from your server
+with `--capability` — either is exact, where `minimal` is only a reasonable
+default.
+
+Across R4's 146 resources it removes 67% of resource-specific parameters, a
+median resource keeping 4. Fifteen of them — `Binary`, `OperationOutcome`,
+`Linkage` and similar — define none of these codes at all, so `minimal` and
+`none` coincide there.
 
 Note that this trims the _contract_, not the server — it does not itself make
 anything faster. Its value is that the published spec matches the deployment.
