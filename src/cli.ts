@@ -64,8 +64,9 @@ function addGenerationOptions(command: Command): Command {
     )
     .option(
       "--search-params <spec...>",
-      "limit resource-specific search parameters: a preset (all, minimal, none), " +
-        "a code list (code,date,subject), or per-resource (Patient:name,birthdate)",
+      "limit resource-specific search parameters: a preset (all, minimal, none) " +
+        "optionally tuned (minimal,+based-on / all,-note), an exact code list " +
+        "(code,date,subject), or per-resource (Patient:minimal,+goal)",
     )
     .option(
       "--capability <source>",

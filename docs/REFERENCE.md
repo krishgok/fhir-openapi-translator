@@ -196,14 +196,31 @@ fhir-oas generate Patient Observation -f r4 \
   --search-params Patient:name,birthdate Observation:code,date
 ```
 
-A code list is taken literally — it is _your_ list, not a suggested one, and
-nothing is added to it. Name every parameter you want; there is no shorthand
-for "these plus the usual ones".
+A code list is taken literally — it is _your_ list, and nothing is added to it.
 
-An unscoped selection applies to every resource; `Resource:codes` overrides it
-for one. Unknown codes are an error rather than being dropped silently. The
-common result parameters (`_id`, `_count`, `_sort`, `_include`, ...) are always
-emitted.
+### Tuning a preset
+
+No fixed rule can know which parameters matter for a given resource.
+`Observation.based-on`, `CarePlan.goal` and `MedicationStatement.adherence` are
+each central to their resource, and none is common enough to curate globally. A
+preset is therefore a starting point that `+code` and `-code` adjust:
+
+```sh
+--search-params minimal,+based-on                # add to a preset
+--search-params minimal,+goal,+condition,+focus  # add as many as you like
+--search-params minimal,-category                # remove from a preset
+--search-params minimal,+based-on,-category      # add and remove together
+--search-params all,-note,-derived-from          # everything except
+--search-params none,+code,+date                 # build up from nothing
+--search-params Observation:minimal,+based-on CarePlan:minimal,+goal
+```
+
+The preset comes first; everything after it is an adjustment. There is no
+limit on how many, and additions and removals may be mixed in any order. Every code named
+anywhere — in a list, an `+add`, or a `-remove` — must exist on that resource,
+so a typo fails loudly instead of quietly shrinking the contract. Mixing a
+preset with bare codes is rejected rather than guessed at: write `minimal,+code`
+to extend the preset, or drop the preset to give an exact list.
 
 `minimal` is the one curated selection, and it is tiered so that it means
 something for every resource rather than only those that happen to use common

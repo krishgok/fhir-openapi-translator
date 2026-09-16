@@ -16,7 +16,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `_count`, ...) are always emitted. `minimal` is tiered — common parameter
   names first, then parameters addressing a top-level element directly, then
   everything — so no resource that defines a search parameter is left with
-  none, while a median resource keeps 4.
+  none, while a median resource keeps 4. Presets can be tuned with `+code` and
+  `-code` (`minimal,+based-on`, `all,-note`), because no fixed rule can know
+  that `Observation.based-on`, `CarePlan.goal` or
+  `MedicationStatement.adherence` matter for their resource.
 - `x-fhir-search-values` on token search parameters bound to a required
   ValueSet, and `x-fhir-search-prefixes` on `number`/`date`/`quantity`
   parameters, listing the comparison prefixes (`eq`, `ne`, `gt`, `lt`, `ge`,

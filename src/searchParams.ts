@@ -1,6 +1,11 @@
 import { loadSearchParameters, loadStructureDefinitions } from "./definitions.js";
 import type { SearchParameter } from "./definitions.js";
-import type { FhirVersion, SearchParamPreset, SearchParamSelection } from "./types.js";
+import type {
+  FhirVersion,
+  SearchParamPreset,
+  SearchParamRule,
+  SearchParamSelection,
+} from "./types.js";
 
 /**
  * Search-value prefixes FHIR defines for ordered types (number, date,
@@ -136,27 +141,79 @@ function minimalCodes(resource: string, available: readonly SearchParameter[]): 
   return new Set(available.map((sp) => sp.code));
 }
 
-function parseOne(value: string): SearchParamPreset | ReadonlySet<string> {
-  const lower = value.toLowerCase();
-  if (lower === "all" || lower === "minimal" || lower === "none") return lower;
-  const codes = value
+const PRESETS = new Set<string>(["all", "minimal", "none"]);
+
+/**
+ * Parses one selection.
+ *
+ * The grammar is a starting point followed by any number of adjustments, in
+ * any order and freely mixed:
+ *
+ *     <preset | code,code,...> [,+code | ,-code]...
+ *
+ *   minimal                              a preset on its own
+ *   minimal,+based-on                    a preset, with a code added
+ *   minimal,+based-on,+goal,+focus       any number may be added
+ *   all,-note,-derived-from              a preset, with codes removed
+ *   minimal,+based-on,-category          additions and removals together
+ *   none,+code,+date                     build a set up from nothing
+ *   code,date,subject                    an exact list, no preset involved
+ */
+function parseOne(value: string): SearchParamRule {
+  const parts = value
     .split(",")
-    .map((c) => c.trim())
+    .map((part) => part.trim())
     .filter(Boolean);
-  if (codes.length === 0) {
-    throw new Error(`--search-params: empty selection in "${value}"`);
+  if (parts.length === 0) throw new Error(`--search-params: empty selection in "${value}"`);
+
+  const add = new Set<string>();
+  const remove = new Set<string>();
+  const literal = new Set<string>();
+  let preset: SearchParamPreset | undefined;
+
+  for (const [index, part] of parts.entries()) {
+    if (part.startsWith("+") || part.startsWith("-")) {
+      const code = part.slice(1);
+      if (!code) throw new Error(`--search-params: "${part}" names no parameter`);
+      (part.startsWith("+") ? add : remove).add(code);
+      continue;
+    }
+    const lower = part.toLowerCase();
+    if (PRESETS.has(lower)) {
+      if (index !== 0) {
+        throw new Error(
+          `--search-params: preset "${part}" must come first in "${value}" ` +
+            `(e.g. "minimal,+${parts[0]}").`,
+        );
+      }
+      preset = lower as SearchParamPreset;
+      continue;
+    }
+    literal.add(part);
   }
-  return new Set(codes);
+
+  if (preset && literal.size > 0) {
+    throw new Error(
+      `--search-params: "${value}" mixes the preset "${preset}" with bare codes ` +
+        `${[...literal].map((c) => `"${c}"`).join(", ")}. ` +
+        `Prefix them with + to add to the preset, or drop the preset to list codes exactly.`,
+    );
+  }
+
+  const rule: SearchParamRule = { base: preset ?? literal };
+  if (add.size > 0) (rule as { add?: ReadonlySet<string> }).add = add;
+  if (remove.size > 0) (rule as { remove?: ReadonlySet<string> }).remove = remove;
+  return rule;
 }
 
 /**
  * Parses `--search-params` arguments. Each is either a bare selection applying
- * to every resource (`none`, `minimal`, `code,date,subject`) or a
+ * to every resource (`none`, `minimal,+goal`, `code,date`) or a
  * resource-scoped one (`Patient:name,birthdate`).
  */
 export function parseSearchParamSpec(specs: readonly string[]): SearchParamSelection {
   const selection: SearchParamSelection = {};
-  const byResource = new Map<string, SearchParamPreset | ReadonlySet<string>>();
+  const byResource = new Map<string, SearchParamRule>();
   for (const spec of specs) {
     // A colon separates resource from codes. Codes never contain one, and a
     // resource name is always a leading capital, so the split is unambiguous.
@@ -182,25 +239,29 @@ export function parseSearchParamSpec(specs: readonly string[]): SearchParamSelec
 }
 
 /**
- * Resolves a selection to the set of codes to emit for one resource, or
- * undefined to emit all of them. Unknown codes are an error: silently dropping
- * a typo'd parameter would quietly shrink the contract.
+ * Resolves a rule to the codes to emit for one resource, or undefined to emit
+ * all of them. Every code named explicitly — in a list, an `+add` or a
+ * `-remove` — must exist on the resource: silently ignoring a typo would
+ * quietly shrink the published contract.
  */
 export function resolveSearchParamCodes(
   selection: SearchParamSelection | undefined,
   fhirVersion: FhirVersion,
   resource: string,
 ): ReadonlySet<string> | undefined {
-  const chosen = selection?.byResource?.get(resource) ?? selection?.default;
-  if (chosen === undefined || chosen === "all") return undefined;
+  const rule = selection?.byResource?.get(resource) ?? selection?.default;
+  if (rule === undefined) return undefined;
+  if (rule.base === "all" && !rule.add && !rule.remove) return undefined;
 
   const available = loadSearchParameters(fhirVersion).filter((sp) => sp.base.includes(resource));
-
-  if (chosen === "none") return new Set();
-  if (chosen === "minimal") return minimalCodes(resource, available);
-
   const codes = new Set(available.map((sp) => sp.code));
-  const unknown = [...chosen].filter((code) => !codes.has(code));
+
+  const named = [
+    ...(typeof rule.base === "string" ? [] : rule.base),
+    ...(rule.add ?? []),
+    ...(rule.remove ?? []),
+  ];
+  const unknown = named.filter((code) => !codes.has(code));
   if (unknown.length > 0) {
     throw new Error(
       `--search-params: ${resource} has no search parameter ` +
@@ -208,5 +269,14 @@ export function resolveSearchParamCodes(
         `Run "fhir-oas generate ${resource} -f ${fhirVersion}" to see the available codes.`,
     );
   }
-  return new Set(chosen);
+
+  let selected: Set<string>;
+  if (rule.base === "all") selected = new Set(codes);
+  else if (rule.base === "none") selected = new Set();
+  else if (rule.base === "minimal") selected = minimalCodes(resource, available);
+  else selected = new Set(rule.base);
+
+  for (const code of rule.add ?? []) selected.add(code);
+  for (const code of rule.remove ?? []) selected.delete(code);
+  return selected;
 }
