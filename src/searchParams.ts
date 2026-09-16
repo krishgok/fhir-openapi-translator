@@ -1,4 +1,5 @@
 import { loadSearchParameters, loadStructureDefinitions } from "./definitions.js";
+import type { SearchParameter } from "./definitions.js";
 import type { FhirVersion, SearchParamPreset, SearchParamSelection } from "./types.js";
 
 /**
@@ -77,11 +78,13 @@ export function searchParamCodes(
 }
 
 /**
- * Codes that a majority of servers index regardless of resource. Used by the
- * `minimal` preset; deliberately small and deliberately opinionated — the
- * explicit allowlist is the precise tool.
+ * Codes a majority of servers index regardless of resource type. This is the
+ * first and strongest signal for the `minimal` preset, but it cannot be the
+ * only one: a handful of resources name none of these (Linkage's parameters
+ * are `author`/`item`/`source`), and a preset that silently selected nothing
+ * for them would be indistinguishable from `none`.
  */
-const MINIMAL_CODES = new Set([
+const COMMON_CODES = new Set([
   "identifier",
   "status",
   "patient",
@@ -94,6 +97,44 @@ const MINIMAL_CODES = new Set([
   "url",
   "name",
 ]);
+
+/**
+ * The branch of a search parameter's expression addressing this resource
+ * directly, i.e. a top-level element (`Linkage.author`) rather than something
+ * nested, chained or filtered (`Observation.component.value`,
+ * `Bundle.entry.request.where(...)`). Direct parameters address the resource
+ * itself and are the cheapest to index, which makes them the right fallback
+ * when none of the common codes apply.
+ */
+function directElementBranch(resource: string, expression: string | undefined): string | undefined {
+  if (!expression) return undefined;
+  const branch = expression
+    .split("|")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${resource}.`));
+  return branch && /^[A-Za-z]+\.[A-Za-z]+$/.test(branch) ? branch : undefined;
+}
+
+/**
+ * The `minimal` selection for one resource, in three tiers so that every
+ * resource defining any search parameter keeps at least one:
+ *
+ *   1. the common codes above, where the resource defines any;
+ *   2. otherwise, parameters addressing a top-level element directly;
+ *   3. otherwise, everything the resource defines.
+ *
+ * A resource that defines no search parameters at all (Binary,
+ * OperationOutcome) yields nothing, because there is nothing to select.
+ */
+function minimalCodes(resource: string, available: readonly SearchParameter[]): Set<string> {
+  const common = available.filter((sp) => COMMON_CODES.has(sp.code));
+  if (common.length > 0) return new Set(common.map((sp) => sp.code));
+
+  const direct = available.filter((sp) => directElementBranch(resource, sp.expression));
+  if (direct.length > 0) return new Set(direct.map((sp) => sp.code));
+
+  return new Set(available.map((sp) => sp.code));
+}
 
 function parseOne(value: string): SearchParamPreset | ReadonlySet<string> {
   const lower = value.toLowerCase();
@@ -153,18 +194,13 @@ export function resolveSearchParamCodes(
   const chosen = selection?.byResource?.get(resource) ?? selection?.default;
   if (chosen === undefined || chosen === "all") return undefined;
 
-  const available = new Set(
-    loadSearchParameters(fhirVersion)
-      .filter((sp) => sp.base.includes(resource))
-      .map((sp) => sp.code),
-  );
+  const available = loadSearchParameters(fhirVersion).filter((sp) => sp.base.includes(resource));
 
   if (chosen === "none") return new Set();
-  if (chosen === "minimal") {
-    return new Set([...available].filter((code) => MINIMAL_CODES.has(code)));
-  }
+  if (chosen === "minimal") return minimalCodes(resource, available);
 
-  const unknown = [...chosen].filter((code) => !available.has(code));
+  const codes = new Set(available.map((sp) => sp.code));
+  const unknown = [...chosen].filter((code) => !codes.has(code));
   if (unknown.length > 0) {
     throw new Error(
       `--search-params: ${resource} has no search parameter ` +

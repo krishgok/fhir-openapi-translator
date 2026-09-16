@@ -12,7 +12,7 @@ import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { FHIR_VERSIONS, generateOpenApi } from "../src/index.js";
+import { FHIR_VERSIONS, generateOpenApi, listResources } from "../src/index.js";
 import { parseSearchParamSpec } from "../src/searchParams.js";
 import type { MinStructureDefinition } from "../src/definitions.js";
 
@@ -146,6 +146,49 @@ describe("search parameters: --search-params selection", () => {
       // minimal is a subset of all, never invented codes.
       expect(minimal.every((n: string) => all.includes(n)), fhirVersion).toBe(true);
     }
+  });
+
+  /**
+   * The reason `minimal` is tiered rather than a flat curated list: a resource
+   * that names none of the common codes (Linkage: author/item/source) would
+   * otherwise select nothing, making `minimal` indistinguishable from `none`.
+   */
+  it("never empties a resource that defines any search parameter", () => {
+    const problems: string[] = [];
+    for (const fhirVersion of FHIR_VERSIONS) {
+      for (const resource of listResources(fhirVersion)) {
+        const all = searchParams(resource, fhirVersion).length;
+        if (all === 0) continue; // Binary, OperationOutcome: nothing to select
+        const kept = searchParams(resource, fhirVersion, {
+          searchParams: parseSearchParamSpec(["minimal"]),
+        }).length;
+        if (kept === 0) problems.push(`${fhirVersion}/${resource}: ${all} params, minimal kept 0`);
+      }
+    }
+    expect(problems).toEqual([]);
+  });
+
+  it("falls back to direct top-level parameters where no common code applies", () => {
+    // Linkage names no common code. Its three parameters are `author`
+    // (Linkage.author, a top-level element) and `item`/`source` (both
+    // Linkage.item.resource, nested). Only the direct one is selected —
+    // the tier exists to avoid selecting nothing, not to select everything.
+    expect(searchParams("Linkage", "r4").map((p: any) => p.name)).toEqual([
+      "author", "item", "source",
+    ]);
+    const kept = searchParams("Linkage", "r4", {
+      searchParams: parseSearchParamSpec(["minimal"]),
+    }).map((p: any) => p.name);
+    expect(kept).toEqual(["author"]);
+  });
+
+  it("still reduces substantially where common codes do apply", () => {
+    const all = searchParams("Observation", "r4").length;
+    const kept = searchParams("Observation", "r4", {
+      searchParams: parseSearchParamSpec(["minimal"]),
+    }).length;
+    expect(all).toBeGreaterThan(30);
+    expect(kept).toBeLessThan(all / 2);
   });
 
   it("applies an explicit list and per-resource scoping", () => {

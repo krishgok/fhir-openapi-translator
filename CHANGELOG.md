@@ -13,7 +13,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`code,date,subject`), or per-resource (`Patient:name,birthdate`). Unknown
   codes are an error rather than being silently dropped. Combines with
   `--capability` by intersection. The common result parameters (`_id`,
-  `_count`, ...) are always emitted.
+  `_count`, ...) are always emitted. `minimal` is tiered — common parameter
+  names first, then parameters addressing a top-level element directly, then
+  everything — so no resource that defines a search parameter is left with
+  none, while a median resource keeps 4.
 - `x-fhir-search-values` on token search parameters bound to a required
   ValueSet, and `x-fhir-search-prefixes` on `number`/`date`/`quantity`
   parameters, listing the comparison prefixes (`eq`, `ne`, `gt`, `lt`, `ge`,

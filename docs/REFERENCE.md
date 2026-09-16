@@ -51,7 +51,7 @@ fhir-oas list --ig ./hl7.fhir.us.core-5.0.1.tgz
 
 # Limit the search parameters. Observation defines 38 on R4:
 fhir-oas generate Observation -f r4 --search-params none      # -> 0
-fhir-oas generate Observation -f r4 --search-params minimal   # -> 8, a fixed common core
+fhir-oas generate Observation -f r4 --search-params minimal   # -> 8, a common core
 fhir-oas generate Observation -f r4 --search-params code,date # -> exactly the 2 you name
 fhir-oas generate Patient Observation -f r4 \
   --search-params Patient:name,birthdate Observation:code,date   # per resource
@@ -205,26 +205,35 @@ for one. Unknown codes are an error rather than being dropped silently. The
 common result parameters (`_id`, `_count`, `_sort`, `_include`, ...) are always
 emitted.
 
-`minimal` is the one curated selection. It keeps whichever of these the
-resource actually defines — the parameters most servers index regardless of
-resource type:
+`minimal` is the one curated selection, and it is tiered so that it means
+something for every resource rather than only those that happen to use common
+parameter names:
 
-`identifier`, `status`, `patient`, `subject`, `encounter`, `code`, `category`,
-`date`, `type`, `url`, `name`
+1. The parameters most servers index regardless of resource type —
+   `identifier`, `status`, `patient`, `subject`, `encounter`, `code`,
+   `category`, `date`, `type`, `url`, `name` — where the resource defines any.
+2. Otherwise, parameters addressing a **top-level element** directly
+   (`Linkage.author`) rather than something nested or filtered
+   (`Linkage.item.resource`). These address the resource itself and are the
+   cheapest to index.
+3. Otherwise, everything the resource defines.
 
 On R4 that takes `Observation` from 38 parameters to 8 (`category`, `code`,
 `date`, `encounter`, `identifier`, `patient`, `status`, `subject`) and
-`Patient` from 23 to 2 (`identifier`, `name`). It is a convenience and it is
-deliberately opinionated: there is no marker in FHIR for "commonly indexed", so
-the list is a judgement call, and it is fixed rather than derived. When the
-selection matters, name the codes explicitly or derive them from your server
-with `--capability` — either is exact, where `minimal` is only a reasonable
-default.
+`Patient` from 23 to 2 (`identifier`, `name`), both via tier 1. `Linkage`,
+whose parameters are `author`, `item` and `source` and which names no common
+code, goes from 3 to 1 via tier 2 rather than to nothing.
 
-Across R4's 146 resources it removes 67% of resource-specific parameters, a
-median resource keeping 4. Fifteen of them — `Binary`, `OperationOutcome`,
-`Linkage` and similar — define none of these codes at all, so `minimal` and
-`none` coincide there.
+Across R4/R4B/R5 no resource that defines a search parameter is left with none,
+while a median resource keeps 4 and roughly two thirds of resource-specific
+parameters are dropped. A resource that defines **no** search parameters at all
+(`Binary`, `OperationOutcome`) yields none, because there is nothing to select
+— that is not `minimal` doing anything.
+
+It remains a convenience and a judgement call: FHIR has no "commonly indexed"
+marker, so tier 1 is a fixed hand-picked list. When the selection matters, name
+the codes explicitly or derive them from your server with `--capability` —
+either is exact, where `minimal` is only a reasonable default.
 
 Note that this trims the _contract_, not the server — it does not itself make
 anything faster. Its value is that the published spec matches the deployment.
