@@ -19,6 +19,7 @@ import {
   parseCapabilityStatement,
   stringifyDocument,
 } from "../src/index.js";
+import { parseSearchParamSpec } from "../src/searchParams.js";
 import fs from "node:fs";
 
 const OPENAPI_VERSIONS = ["3.0.3", "3.1.0"] as const;
@@ -26,7 +27,10 @@ const BACKENDS = ["schema-json", "structure-def"] as const;
 const FHIR_NUMBERS = { r4: "4.0.1", r4b: "4.3.0", r5: "5.0.0" } as const;
 const R5_IG = path.resolve(__dirname, "fixtures/ig-r5-minimal");
 const capabilityFixture = JSON.parse(
-  fs.readFileSync(path.resolve(__dirname, "fixtures/capabilitystatement-minimal.json"), "utf8"),
+  fs.readFileSync(
+    path.resolve(__dirname, "fixtures/capabilitystatement-minimal.json"),
+    "utf8",
+  ),
 );
 
 const valid = async (doc: unknown) =>
@@ -51,8 +55,14 @@ describe("claim: R4/R4B/R5 -> OpenAPI 3.0.3 or 3.1.0, YAML or JSON", () => {
   it("stamps the declared OpenAPI and FHIR versions", () => {
     for (const fhirVersion of FHIR_VERSIONS) {
       for (const openApiVersion of OPENAPI_VERSIONS) {
-        const doc = generateOpenApi({ resources: ["Patient"], fhirVersion, openApiVersion }) as any;
-        expect(doc.openapi, `${fhirVersion}/${openApiVersion}`).toBe(openApiVersion);
+        const doc = generateOpenApi({
+          resources: ["Patient"],
+          fhirVersion,
+          openApiVersion,
+        }) as any;
+        expect(doc.openapi, `${fhirVersion}/${openApiVersion}`).toBe(
+          openApiVersion,
+        );
         expect(doc.info.version, fhirVersion).toBe(FHIR_NUMBERS[fhirVersion]);
       }
     }
@@ -63,7 +73,11 @@ describe("claim: minimal output - only what you ask for and what it references",
   it("emits no schema unreachable from the requested roots", () => {
     for (const fhirVersion of FHIR_VERSIONS) {
       for (const source of BACKENDS) {
-        const doc = generateOpenApi({ resources: ["Patient"], fhirVersion, source }) as any;
+        const doc = generateOpenApi({
+          resources: ["Patient"],
+          fhirVersion,
+          source,
+        }) as any;
         const schemas: Record<string, unknown> = doc.components.schemas;
 
         const seen = new Set<string>();
@@ -87,10 +101,16 @@ describe("claim: minimal output - only what you ask for and what it references",
 
   it("does not drag in unrequested resource types", () => {
     for (const fhirVersion of FHIR_VERSIONS) {
-      const doc = generateOpenApi({ resources: ["Patient"], fhirVersion }) as any;
+      const doc = generateOpenApi({
+        resources: ["Patient"],
+        fhirVersion,
+      }) as any;
       // Observation is never reachable from Patient; it must not appear.
       expect(doc.components.schemas.Observation, fhirVersion).toBeUndefined();
-      expect(Object.keys(doc.paths).every((p) => /^\/(Patient)/.test(p)), fhirVersion).toBe(true);
+      expect(
+        Object.keys(doc.paths).every((p) => /^\/(Patient)/.test(p)),
+        fhirVersion,
+      ).toBe(true);
     }
   });
 });
@@ -106,7 +126,9 @@ describe("claim: custom operations from the official OperationDefinitions", () =
           operations: true,
         }) as any;
         const label = `${fhirVersion}/${openApiVersion}`;
-        const operationPaths = Object.keys(doc.paths).filter((p) => p.includes("$"));
+        const operationPaths = Object.keys(doc.paths).filter((p) =>
+          p.includes("$"),
+        );
         for (const op of ["everything", "validate", "meta"]) {
           expect(
             operationPaths.some((p) => p.endsWith(`$${op}`)),
@@ -114,8 +136,10 @@ describe("claim: custom operations from the official OperationDefinitions", () =
           ).toBe(true);
         }
         const result = await valid(doc);
-        expect(result.errors, `${label}: ${JSON.stringify(result.errors ?? null).slice(0, 400)}`)
-          .toBeUndefined();
+        expect(
+          result.errors,
+          `${label}: ${JSON.stringify(result.errors ?? null).slice(0, 400)}`,
+        ).toBeUndefined();
       }
     }
   });
@@ -123,7 +147,13 @@ describe("claim: custom operations from the official OperationDefinitions", () =
   it("reflects each version's own OperationDefinitions rather than a fixed list", () => {
     const opsFor = (fhirVersion: (typeof FHIR_VERSIONS)[number]) =>
       Object.keys(
-        (generateOpenApi({ resources: ["Patient"], fhirVersion, operations: true }) as any).paths,
+        (
+          generateOpenApi({
+            resources: ["Patient"],
+            fhirVersion,
+            operations: true,
+          }) as any
+        ).paths,
       ).filter((p) => p.includes("$"));
     // R5 adds Patient operations that do not exist in R4 (e.g. $merge).
     expect(opsFor("r5").length).toBeGreaterThan(opsFor("r4").length);
@@ -133,7 +163,9 @@ describe("claim: custom operations from the official OperationDefinitions", () =
 });
 
 describe("claim: profiles from any IG package (not just US Core, not just R4)", () => {
-  const profiled = (openApiVersion: (typeof OPENAPI_VERSIONS)[number] = "3.0.3") =>
+  const profiled = (
+    openApiVersion: (typeof OPENAPI_VERSIONS)[number] = "3.0.3",
+  ) =>
     generateOpenApi({
       resources: ["Patient"],
       fhirVersion: "r5",
@@ -185,7 +217,10 @@ describe("claim: profiles from any IG package (not just US Core, not just R4)", 
   it("validates against the meta-schema in both OpenAPI versions", async () => {
     for (const openApiVersion of OPENAPI_VERSIONS) {
       const result = await valid(profiled(openApiVersion));
-      expect(result.errors, JSON.stringify(result.errors ?? null).slice(0, 400)).toBeUndefined();
+      expect(
+        result.errors,
+        JSON.stringify(result.errors ?? null).slice(0, 400),
+      ).toBeUndefined();
     }
   });
 });
@@ -205,20 +240,89 @@ describe("claim: CapabilityStatement-driven generation", () => {
 
         // Patient declares read + search-type only.
         expect(Object.keys(doc.paths["/Patient"]), label).toEqual(["get"]);
-        expect(Object.keys(doc.paths["/Patient/{id}"]), label).toEqual(["parameters", "get"]);
+        expect(Object.keys(doc.paths["/Patient/{id}"]), label).toEqual([
+          "parameters",
+          "get",
+        ]);
         expect(doc.paths["/Patient/{id}/_history"], label).toBeUndefined();
         // Observation additionally declares create.
-        expect(Object.keys(doc.paths["/Observation"]).sort(), label).toEqual(["get", "post"]);
+        expect(Object.keys(doc.paths["/Observation"]).sort(), label).toEqual([
+          "get",
+          "post",
+        ]);
         // Nothing undeclared leaks in.
         expect(
-          Object.keys(doc.paths).every((p) => /^\/(Patient|Observation)/.test(p)),
+          Object.keys(doc.paths).every((p) =>
+            /^\/(Patient|Observation)/.test(p),
+          ),
           label,
         ).toBe(true);
 
         const result = await valid(doc);
-        expect(result.errors, `${label}: ${JSON.stringify(result.errors ?? null).slice(0, 400)}`)
-          .toBeUndefined();
+        expect(
+          result.errors,
+          `${label}: ${JSON.stringify(result.errors ?? null).slice(0, 400)}`,
+        ).toBeUndefined();
       }
+    }
+  });
+});
+
+describe("claim: search parameters documented and tunable", () => {
+  // README: "accepted codes and comparison prefixes per FHIR version; emit
+  // only the ones your deployment indexes."
+  it("documents accepted codes and prefixes on every FHIR version", () => {
+    for (const fhirVersion of FHIR_VERSIONS) {
+      const params = (
+        generateOpenApi({ resources: ["Observation"], fhirVersion }) as any
+      ).paths["/Observation"].get.parameters.filter((p: any) => !p.$ref);
+
+      const status = params.find((p: any) => p.name === "status");
+      expect(
+        status["x-fhir-search-values"],
+        `${fhirVersion}: status codes`,
+      ).toContain("final");
+      expect(status.description, fhirVersion).toMatch(/Accepted values:/);
+
+      const date = params.find((p: any) => p.name === "date");
+      expect(
+        date["x-fhir-search-prefixes"],
+        `${fhirVersion}: date prefixes`,
+      ).toContain("ge");
+      expect(date.description, fhirVersion).toMatch(/comparison prefix/);
+    }
+  });
+
+  it("reports each version's own codes rather than a fixed list", () => {
+    const codes = (fhirVersion: any) =>
+      (generateOpenApi({ resources: ["Encounter"], fhirVersion }) as any).paths[
+        "/Encounter"
+      ].get.parameters.find((p: any) => p.name === "status")[
+        "x-fhir-search-values"
+      ];
+    expect(codes("r4")).toContain("arrived");
+    expect(codes("r5")).toContain("completed");
+    expect(codes("r4")).not.toEqual(codes("r5"));
+  });
+
+  it("emits only the selected parameters, on every FHIR version", () => {
+    for (const fhirVersion of FHIR_VERSIONS) {
+      const emitted = (
+        generateOpenApi({
+          resources: ["Observation"],
+          fhirVersion,
+          searchParams: parseSearchParamSpec(["minimal,+based-on"]),
+        } as any) as any
+      ).paths["/Observation"].get.parameters.filter((p: any) => !p.$ref);
+      const all = (
+        generateOpenApi({ resources: ["Observation"], fhirVersion }) as any
+      ).paths["/Observation"].get.parameters.filter((p: any) => !p.$ref);
+
+      expect(emitted.length, fhirVersion).toBeLessThan(all.length);
+      expect(
+        emitted.map((p: any) => p.name),
+        fhirVersion,
+      ).toContain("based-on");
     }
   });
 });
