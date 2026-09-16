@@ -47,6 +47,13 @@ export interface SearchParameter {
   base: string[];
   type: string;
   description?: string;
+  /**
+   * FHIRPath naming the element(s) searched. Simple dotted forms resolve to a
+   * single element and let a token parameter's required-binding codes be
+   * looked up; `where(...)`/`as(...)`/`|` forms name more than one and are
+   * left alone. Absent on a few composite parameters.
+   */
+  expression?: string;
 }
 
 export function loadSearchParameters(fhirVersion: FhirVersion): SearchParameter[] {

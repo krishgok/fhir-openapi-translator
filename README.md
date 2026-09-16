@@ -50,6 +50,9 @@ fhir-oas generate Patient -f r4 --operations
 # Apply an Implementation Guide profile (e.g. US Core)
 fhir-oas generate Patient -f r4 --ig hl7.fhir.us.core@5.0.1 --profile us-core-patient
 
+# Trim the search parameters to what your server actually indexes
+fhir-oas generate Observation -f r4 --search-params code,date,subject
+
 # Match one server's declared surface (reads its /metadata)
 fhir-oas generate -f r4 --capability https://server.example.org/fhir
 
@@ -76,16 +79,17 @@ const doc = generateOpenApi({ resources: ["Patient"], fhirVersion: "r4" });
 - **Custom operations** from the official OperationDefinitions.
 - **Profiles / IGs** — apply US Core-style constraints from any IG package.
 - **CapabilityStatement-driven** — generate exactly what a server supports.
+- **Tunable search parameters** — emit only the ones your deployment indexes.
 - **Merge mode & drift guard** — coexist with hand-written specs, catch drift in CI.
 
 ## Where it fits
 
-|  | fhir-openapi-translator | HAPI / Firely |
-|---|:---:|:---:|
-| Output | OpenAPI (→ any language) | Java / .NET models |
-| Runtime needed | none (offline CLI) | a running server / SDK |
-| US Core / IG profiles | ✅ | ✅ |
-| Per-resource, codegen-tuned specs | ✅ | — |
+|                                   | fhir-openapi-translator  |     HAPI / Firely      |
+| --------------------------------- | :----------------------: | :--------------------: |
+| Output                            | OpenAPI (→ any language) |   Java / .NET models   |
+| Runtime needed                    |    none (offline CLI)    | a running server / SDK |
+| US Core / IG profiles             |            ✅            |           ✅           |
+| Per-resource, codegen-tuned specs |            ✅            |           —            |
 
 **Complements a FHIR SDK, doesn't replace it.** Keep HAPI or Firely for server-side models and conformance — this produces the OpenAPI contract around them: for consumers in any language, and for the tooling you already run (gateways, mock servers, contract tests).
 
