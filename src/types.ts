@@ -47,13 +47,31 @@ export interface IgContextLike {
 export type SearchParamPreset = "all" | "minimal" | "none";
 
 /**
+ * One resource's selection: a starting set, then adjustments.
+ *
+ * No fixed rule can encode which parameters matter for a given resource —
+ * `Observation.based-on`, `CarePlan.goal` and `MedicationStatement.adherence`
+ * are all central to their resource and none is common enough to curate
+ * globally. So a preset is a starting point that `add`/`remove` tune, rather
+ * than a take-it-or-leave-it list.
+ */
+export interface SearchParamRule {
+  /** A preset, or an explicit list replacing it entirely. */
+  base: SearchParamPreset | ReadonlySet<string>;
+  /** Codes to add to the base. */
+  add?: ReadonlySet<string>;
+  /** Codes to drop from the base. */
+  remove?: ReadonlySet<string>;
+}
+
+/**
  * Which resource-specific search parameters to emit. A `default` applies to
  * every resource; `byResource` overrides it per resource. The common result
  * parameters (`_id`, `_count`, ...) are always emitted regardless.
  */
 export interface SearchParamSelection {
-  default?: SearchParamPreset | ReadonlySet<string>;
-  byResource?: ReadonlyMap<string, SearchParamPreset | ReadonlySet<string>>;
+  default?: SearchParamRule;
+  byResource?: ReadonlyMap<string, SearchParamRule>;
 }
 
 /** A parsed CapabilityStatement (see capability.ts). */

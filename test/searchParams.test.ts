@@ -206,7 +206,56 @@ describe("search parameters: --search-params selection", () => {
     expect(names("Patient", "r4", spec)).toEqual([]);
   });
 
+  /**
+   * No fixed rule can know that Observation.based-on, CarePlan.goal or
+   * MedicationStatement.adherence matter for their resource — each is central
+   * to it and none is common enough to curate globally. Presets are therefore
+   * a starting point, not a take-it-or-leave-it list.
+   */
+  it("tunes a preset with +add and -remove", () => {
+    const base = names("Observation", "r4", parseSearchParamSpec(["minimal"]));
+    expect(base).not.toContain("based-on");
+
+    const added = names("Observation", "r4", parseSearchParamSpec(["minimal,+based-on"]));
+    expect(added).toEqual([...base, "based-on"].sort());
+
+    const removed = names("Observation", "r4", parseSearchParamSpec(["minimal,-category"]));
+    expect(removed).toEqual(base.filter((c: string) => c !== "category"));
+
+    // The reviewer's other examples, on the resources they named.
+    expect(names("CarePlan", "r4", parseSearchParamSpec(["minimal,+goal,+condition"]))).toEqual(
+      expect.arrayContaining(["goal", "condition"]),
+    );
+    expect(
+      names("MedicationStatement", "r5", parseSearchParamSpec(["minimal,+adherence"])),
+    ).toContain("adherence");
+  });
+
+  it("supports everything-except via all with removals", () => {
+    const all = names("Observation", "r4", parseSearchParamSpec(["all"]));
+    const fewer = names("Observation", "r4", parseSearchParamSpec(["all,-code,-date"]));
+    expect(fewer).toEqual(all.filter((c: string) => c !== "code" && c !== "date"));
+    expect(fewer.length).toBe(all.length - 2);
+  });
+
+  it("applies adjustments per resource", () => {
+    const spec = parseSearchParamSpec(["Patient:minimal", "Observation:minimal,+based-on"]);
+    expect(names("Patient", "r4", spec)).not.toContain("based-on");
+    expect(names("Observation", "r4", spec)).toContain("based-on");
+  });
+
   it("rejects unknown codes and contradictory specs", () => {
+    // A typo in an adjustment must fail as loudly as one in a plain list.
+    expect(() => names("Observation", "r4", parseSearchParamSpec(["minimal,+basedon"]))).toThrow(
+      /no search parameter "basedon"/,
+    );
+    expect(() => names("Observation", "r4", parseSearchParamSpec(["minimal,-nope"]))).toThrow(
+      /no search parameter "nope"/,
+    );
+    expect(() => parseSearchParamSpec(["code,minimal"])).toThrow(/must come first/);
+    expect(() => parseSearchParamSpec(["minimal,based-on"])).toThrow(/mixes the preset/);
+    expect(() => parseSearchParamSpec(["minimal,+"])).toThrow(/names no parameter/);
+
     expect(() => names("Observation", "r4", parseSearchParamSpec(["cod"]))).toThrow(
       /no search parameter "cod"/,
     );
