@@ -206,14 +206,17 @@ each central to their resource, and none is common enough to curate globally. A
 preset is therefore a starting point that `+code` and `-code` adjust:
 
 ```sh
---search-params minimal,+based-on          # the preset plus one more
---search-params minimal,+goal,+condition   # plus several
---search-params minimal,-category          # the preset minus one
---search-params all,-note,-derived-from    # everything except these
+--search-params minimal,+based-on                # add to a preset
+--search-params minimal,+goal,+condition,+focus  # add as many as you like
+--search-params minimal,-category                # remove from a preset
+--search-params minimal,+based-on,-category      # add and remove together
+--search-params all,-note,-derived-from          # everything except
+--search-params none,+code,+date                 # build up from nothing
 --search-params Observation:minimal,+based-on CarePlan:minimal,+goal
 ```
 
-The preset comes first; everything after it is an adjustment. Every code named
+The preset comes first; everything after it is an adjustment. There is no
+limit on how many, and additions and removals may be mixed in any order. Every code named
 anywhere — in a list, an `+add`, or a `-remove` — must exist on that resource,
 so a typo fails loudly instead of quietly shrinking the contract. Mixing a
 preset with bare codes is rejected rather than guessed at: write `minimal,+code`

@@ -144,13 +144,20 @@ function minimalCodes(resource: string, available: readonly SearchParameter[]): 
 const PRESETS = new Set<string>(["all", "minimal", "none"]);
 
 /**
- * Parses one selection: a preset or explicit list, optionally followed by
- * `+code` / `-code` adjustments.
+ * Parses one selection.
  *
- *   minimal                      the preset
- *   minimal,+based-on,+goal      the preset plus two more
- *   all,-note,-derived-from      everything except two
- *   code,date,subject            exactly these
+ * The grammar is a starting point followed by any number of adjustments, in
+ * any order and freely mixed:
+ *
+ *     <preset | code,code,...> [,+code | ,-code]...
+ *
+ *   minimal                              a preset on its own
+ *   minimal,+based-on                    a preset, with a code added
+ *   minimal,+based-on,+goal,+focus       any number may be added
+ *   all,-note,-derived-from              a preset, with codes removed
+ *   minimal,+based-on,-category          additions and removals together
+ *   none,+code,+date                     build a set up from nothing
+ *   code,date,subject                    an exact list, no preset involved
  */
 function parseOne(value: string): SearchParamRule {
   const parts = value

@@ -231,6 +231,38 @@ describe("search parameters: --search-params selection", () => {
     ).toContain("adherence");
   });
 
+  // Each form the reference documents, asserted so the docs cannot drift.
+  it("accepts any number of adjustments, mixed in any order", () => {
+    const base = names("Observation", "r4", parseSearchParamSpec(["minimal"]));
+
+    const many = names(
+      "Observation",
+      "r4",
+      parseSearchParamSpec(["minimal,+based-on,+derived-from,+focus,+method"]),
+    );
+    expect(many).toEqual([...base, "based-on", "derived-from", "focus", "method"].sort());
+
+    const mixed = names(
+      "Observation",
+      "r4",
+      parseSearchParamSpec(["minimal,+based-on,-category,+focus,-code"]),
+    );
+    expect(mixed).toContain("based-on");
+    expect(mixed).toContain("focus");
+    expect(mixed).not.toContain("category");
+    expect(mixed).not.toContain("code");
+
+    // Order is irrelevant: the same adjustments give the same result.
+    expect(
+      names("Observation", "r4", parseSearchParamSpec(["minimal,-code,+focus,-category,+based-on"])),
+    ).toEqual(mixed);
+
+    // `none` plus additions builds a set up from nothing.
+    expect(names("Observation", "r4", parseSearchParamSpec(["none,+code,+date"]))).toEqual([
+      "code", "date",
+    ]);
+  });
+
   it("supports everything-except via all with removals", () => {
     const all = names("Observation", "r4", parseSearchParamSpec(["all"]));
     const fewer = names("Observation", "r4", parseSearchParamSpec(["all,-code,-date"]));
