@@ -29,6 +29,12 @@ Regenerate committed specs, or `fhir-oas check` will fail in CI.
   `-code` (`minimal,+based-on`, `all,-note`), because no fixed rule can know
   that `Observation.based-on`, `CarePlan.goal` or
   `MedicationStatement.adherence` matter for their resource.
+- `fhir-oas --version` (and `-V`) prints the installed version. It is read from
+  `package.json` at runtime rather than inlined at build time, so the CLI
+  cannot report a version the package does not have.
+- `./package.json` is now a subpath export. Reaching for it previously raised
+  `ERR_PACKAGE_PATH_NOT_EXPORTED`, which some bundlers and
+  version-introspection scripts trip over.
 - `x-fhir-search-values` on token search parameters bound to a required
   ValueSet, and `x-fhir-search-prefixes` on `number`/`date`/`quantity`
   parameters, listing the comparison prefixes (`eq`, `ne`, `gt`, `lt`, `ge`,

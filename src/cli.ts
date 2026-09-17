@@ -3,6 +3,7 @@ import { Command, Option } from "commander";
 import fs from "node:fs";
 import { generateOpenApi, listResources } from "./generate.js";
 import { parseSearchParamSpec } from "./searchParams.js";
+import { packageVersion } from "./version.js";
 import { loadCapabilityStatement, type Capability } from "./capability.js";
 import { loadIg, type IgContext } from "./ig/package.js";
 import { buildCoreValueSetFallback } from "./ig/profile.js";
@@ -15,7 +16,8 @@ program
   .name("fhir-oas")
   .description(
     "Generate OpenAPI specifications for HL7 FHIR resources, for model codegen in any language.",
-  );
+  )
+  .version(packageVersion(), "-V, --version", "print the fhir-oas version");
 
 const fhirVersionOption = () =>
   new Option("-f, --fhir-version <version>", "FHIR version")
