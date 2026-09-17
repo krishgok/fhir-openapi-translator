@@ -4,7 +4,16 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-09-17
+
+Search parameters gain derived metadata and a way to emit fewer of them.
+
+No API or CLI breakage — every 0.1.1 invocation behaves as before. Generated
+output does change, though, so **a committed spec will show drift**: on an R4
+`Observation`, schemas and paths are byte-identical, 6 of 38 search parameters
+gain `x-fhir-search-values`/`x-fhir-search-prefixes` and a fuller description,
+and 4 more have trailing whitespace trimmed from HL7's description text.
+Regenerate committed specs, or `fhir-oas check` will fail in CI.
 
 ### Added
 
