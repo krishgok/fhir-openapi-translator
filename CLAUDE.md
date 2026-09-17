@@ -26,14 +26,6 @@ codegen in any language. TypeScript CLI (`fhir-oas`) + library.
 Pick these up when a change is next planned; none is urgent, and none blocks
 a release.
 
-- [ ] **`fhir-oas --version` is unsupported** — exits with
-      `error: unknown option '--version'`. Standard CLI affordance; smallest
-      real papercut on the list. Good candidate for 0.1.2.
-- [ ] **`./package.json` is not in the `exports` map** — so
-      `require("fhir-openapi-translator/package.json")` throws
-      `ERR_PACKAGE_PATH_NOT_EXPORTED`. A legitimate choice, but some bundlers
-      and version-introspection scripts reach for it. Add the subpath export
-      if anyone hits it.
 - [ ] **Community launch, both drafted and unsent**: a chat.fhir.org (Zulip)
       announcement, and a `fhir-fuel/awesome-FHIR` PR adding an entry under
       its empty `JSON Schema` section. The awesome-FHIR PR must come from the

@@ -7,7 +7,10 @@ import { parse } from "yaml";
 
 const CLI = path.resolve(__dirname, "../dist/cli.js");
 
-function run(args: string[], expectFailure = false): { stdout: string; code: number } {
+function run(
+  args: string[],
+  expectFailure = false,
+): { stdout: string; code: number } {
   try {
     const stdout = execFileSync("node", [CLI, ...args], { encoding: "utf8" });
     return { stdout, code: 0 };
@@ -25,7 +28,27 @@ function tmpFile(name: string): string {
   return path.join(dir, name);
 }
 
+const PACKAGE_JSON = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, "../package.json"), "utf8"),
+) as { version: string; exports: Record<string, unknown> };
+
 describe("fhir-oas CLI (requires `npm run build`)", () => {
+  // Reported at runtime from package.json, so the two cannot drift apart.
+  it("reports its own version, matching package.json", () => {
+    for (const flag of ["--version", "-V"]) {
+      const { stdout } = run([flag]);
+      expect(stdout.trim(), flag).toBe(PACKAGE_JSON.version);
+    }
+    expect(PACKAGE_JSON.version).toMatch(/^\d+\.\d+\.\d+/);
+  });
+
+  // Some bundlers and version-introspection scripts reach for it; without the
+  // subpath export Node raises ERR_PACKAGE_PATH_NOT_EXPORTED.
+  it("exports ./package.json as a subpath", () => {
+    expect(PACKAGE_JSON.exports["./package.json"]).toBe("./package.json");
+    expect(PACKAGE_JSON.exports["."]).toBeDefined();
+  });
+
   it("generates YAML to stdout", () => {
     const { stdout } = run(["generate", "Patient", "--fhir-version", "r4"]);
     const doc = parse(stdout);
@@ -36,11 +59,16 @@ describe("fhir-oas CLI (requires `npm run build`)", () => {
   it("writes JSON with --format json and accepts 3.1", () => {
     const out = tmpFile("patient.json");
     run([
-      "generate", "Patient",
-      "--fhir-version", "r5",
-      "--openapi-version", "3.1",
-      "--format", "json",
-      "-o", out,
+      "generate",
+      "Patient",
+      "--fhir-version",
+      "r5",
+      "--openapi-version",
+      "3.1",
+      "--format",
+      "json",
+      "-o",
+      out,
     ]);
     const doc = JSON.parse(fs.readFileSync(out, "utf8"));
     expect(doc.openapi).toBe("3.1.0");
@@ -50,19 +78,43 @@ describe("fhir-oas CLI (requires `npm run build`)", () => {
   it("merges into an existing file, failing on conflicts unless --force", () => {
     const out = tmpFile("api.yaml");
     run(["generate", "Patient", "--fhir-version", "r4", "-o", out]);
-    run(["generate", "Observation", "--fhir-version", "r4", "--merge-into", out]);
+    run([
+      "generate",
+      "Observation",
+      "--fhir-version",
+      "r4",
+      "--merge-into",
+      out,
+    ]);
     const doc = parse(fs.readFileSync(out, "utf8"));
     expect(doc.components.schemas.Patient).toBeDefined();
     expect(doc.components.schemas.Observation).toBeDefined();
 
     // Same resource, different trim -> conflicting schema bodies.
     const conflict = run(
-      ["generate", "Patient", "--fhir-version", "r4", "--exclude-narrative", "--merge-into", out],
+      [
+        "generate",
+        "Patient",
+        "--fhir-version",
+        "r4",
+        "--exclude-narrative",
+        "--merge-into",
+        out,
+      ],
       true,
     );
     expect(conflict.code).toBe(1);
 
-    run(["generate", "Patient", "--fhir-version", "r4", "--exclude-narrative", "--force", "--merge-into", out]);
+    run([
+      "generate",
+      "Patient",
+      "--fhir-version",
+      "r4",
+      "--exclude-narrative",
+      "--force",
+      "--merge-into",
+      out,
+    ]);
     const forced = parse(fs.readFileSync(out, "utf8"));
     expect(forced.components.schemas.Narrative.type).toBe("object");
   });
@@ -71,44 +123,79 @@ describe("fhir-oas CLI (requires `npm run build`)", () => {
     const out = tmpFile("checked.yaml");
     run(["generate", "Patient", "--fhir-version", "r4", "-o", out]);
 
-    const inSync = run(["check", "Patient", "--fhir-version", "r4", "--file", out]);
+    const inSync = run([
+      "check",
+      "Patient",
+      "--fhir-version",
+      "r4",
+      "--file",
+      out,
+    ]);
     expect(inSync.code).toBe(0);
 
     // Same file no longer covers Observation -> drift.
     const drift = run(
-      ["check", "Patient", "Observation", "--fhir-version", "r4", "--file", out],
+      [
+        "check",
+        "Patient",
+        "Observation",
+        "--fhir-version",
+        "r4",
+        "--file",
+        out,
+      ],
       true,
     );
     expect(drift.code).toBe(1);
   });
 
   it("generate --no-enums strips binding enums", () => {
-    const { stdout } = run(["generate", "Patient", "--fhir-version", "r4", "--no-enums"]);
+    const { stdout } = run([
+      "generate",
+      "Patient",
+      "--fhir-version",
+      "r4",
+      "--no-enums",
+    ]);
     const doc = parse(stdout);
-    expect(doc.components.schemas.Patient.properties.gender.enum).toBeUndefined();
-    expect(doc.components.schemas.Patient.properties.resourceType.enum).toEqual(["Patient"]);
+    expect(
+      doc.components.schemas.Patient.properties.gender.enum,
+    ).toBeUndefined();
+    expect(doc.components.schemas.Patient.properties.resourceType.enum).toEqual(
+      ["Patient"],
+    );
   });
 
   it("generates a profiled spec and checks it round-trips", () => {
     const igDir = path.resolve(__dirname, "fixtures/us-core");
     const out = tmpFile("uscore.yaml");
     run([
-      "generate", "Patient",
-      "--fhir-version", "r4",
-      "--ig", igDir,
-      "--profile", "us-core-patient",
-      "-o", out,
+      "generate",
+      "Patient",
+      "--fhir-version",
+      "r4",
+      "--ig",
+      igDir,
+      "--profile",
+      "us-core-patient",
+      "-o",
+      out,
     ]);
     const doc = parse(fs.readFileSync(out, "utf8"));
     expect(doc.components.schemas.USCorePatientProfile).toBeDefined();
     expect(doc.components.schemas.Patient).toBeUndefined();
 
     const inSync = run([
-      "check", "Patient",
-      "--fhir-version", "r4",
-      "--ig", igDir,
-      "--profile", "us-core-patient",
-      "--file", out,
+      "check",
+      "Patient",
+      "--fhir-version",
+      "r4",
+      "--ig",
+      igDir,
+      "--profile",
+      "us-core-patient",
+      "--file",
+      out,
     ]);
     expect(inSync.code).toBe(0);
   });
