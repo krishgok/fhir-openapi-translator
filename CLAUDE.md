@@ -36,15 +36,31 @@ a release.
       `JSON Schema` section. Must come from the maintainer's own account (see
       Environment notes). Worth holding until the Zulip thread has settled, in
       case it surfaces prior art.
-- [ ] **`fixed[x]` inside shared types — an `allOf` intersection may solve it.**
-      The gap is documented in REFERENCE and raised in the Zulip post, and the
-      obvious counter-suggestion is to narrow a `$ref` by intersecting it:
-      `allOf: [{$ref: CodeableConcept}, {properties: {coding: ...}}]`. That is
-      valid JSON Schema and so valid OpenAPI 3.1. It is untried here; the open
-      question is how well `openapi-generator` targets handle `allOf` — several
-      flatten it into a fresh inline model, which would undo the shared-type
-      saving (CodeableConcept is referenced 25 times in a single Observation
-      spec). Test against the CI codegen targets before committing to it.
+- [ ] **Read `supportedProfile` in `--capability`.** `CapabilityStatement`
+      `rest.resource.supportedProfile` names the profiles a server claims to
+      support; `capability.ts` does not look at it at all today, so profile
+      selection is entirely manual via `--ig`/`--profile`. Wiring it up would
+      let one `--capability` call pick the right profiles for a server instead
+      of the user guessing. Raised indirectly on chat.fhir.org.
+
+### Answered on chat.fhir.org (do not re-open)
+
+- **`allOf` will not rescue `fixed[x]`/`pattern[x]` on shared types.** The idea
+  was to narrow a `$ref` by intersecting it. Lloyd McKenzie pointed out why it
+  fails: a fixed code has to match **both** `code` and `system`, and
+  `CodeableConcept.coding` is an array that may carry translations, so the
+  constraint is "some coding matches on both fields" — `contains`, not
+  `properties`. `contains` needs JSON Schema draft-6+, so OpenAPI 3.0.3 (a
+  draft-4 subset) cannot express it at all, and code generators ignore it
+  because it yields no type information. Not worth building.
+
+- **What a profile actually carries is mostly not schema.** Grahame Grieve's
+  point, and the census for US Core Blood Pressure bears it out: of 94
+  elements, 31 `mustSupport`, 84 `constraint`, 44 slice members, 16 extensible
+  bindings, 6 `fixed[x]`, 3 `pattern[x]` — against only 3 required bindings.
+  What this tool represents is 23 cardinality constraints, 3 required-binding
+  enums and 3 choice narrowings. That ratio is the honest description of
+  "profile support" and should be stated wherever the feature is described.
 
 ### Environment notes
 
