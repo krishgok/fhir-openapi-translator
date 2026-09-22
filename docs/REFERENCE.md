@@ -299,6 +299,15 @@ schema. Such fixed values are therefore **not** represented — US Core Blood
 Pressure, for example, declares six and none appear as `const`. Only fixed
 values on elements the profile emits as their own property are applied.
 
+An `allOf` intersection narrowing the `$ref` does not rescue this. A fixed code
+must match **both** `code` and `system`, and `CodeableConcept.coding` is an
+array that may carry translations, so the constraint is "some coding matches on
+both fields" — `contains`, not `properties`. `contains` requires JSON Schema
+draft-6 or later, so OpenAPI 3.0.3 cannot express it at all, and code
+generators ignore it because it carries no type information. If you need these
+constraints enforced, validate with a real FHIR validator rather than expecting
+the schema to carry them.
+
 The IG package is a local `.tgz` / unpacked directory, or a `name@version` coordinate fetched from `packages.fhir.org` and cached under `~/.fhir-oas/packages`. Profiles must ship a snapshot (differential-only packages error); the package FHIR version must match `--fhir-version`; only the public registry is supported (no auth).
 
 ## Assumptions and known limitations
