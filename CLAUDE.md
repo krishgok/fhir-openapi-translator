@@ -91,6 +91,48 @@ a release.
   consumer to filter one resource type into several shapes, which is why one
   resource type can legitimately have many of them declared at once.
 
+### Checked against fhir-codegen (github.com/fhir/fhir-codegen) before sending Gino anything
+
+Cloned read-only (`add_repo`, not attached) and grepped the OpenAPI target
+(`src/Fhir.CodeGen.Lib/Language/OpenApi/`, ~6800 lines across
+`ModelBuilder.cs`/`LangOpenApi.cs`/`OpenApiCommon.cs`/`OpenApiOptions.cs`)
+before drafting requirements, so as not to hand Gino things he's already
+solved.
+
+- **Slicing — already solved, more generally than ours.** Do not send this as
+  a "watch out for" item. Their shared `ComponentDefinition.cgGetChildren(bool
+includeDescendants, bool skipSlices = true)` skips a slice and its
+  descendants whenever `e.ElementId`'s colon count exceeds the current node's
+  — a relative check, so it generalizes to slicing nested inside slicing,
+  which our fix (a flat "contains `:`" check) does not handle. The OpenAPI
+  target calls `cgGetChildren(includeDescendants: false)` with no explicit
+  `skipSlices` argument, inheriting the safe default. Confirmed: zero
+  references to `Slic` anywhere in the OpenAPI target files themselves — the
+  safety is entirely upstream, shared across every language target.
+- **Search parameter codes/prefixes — confirmed absent.** `BuildSearchParameters`
+  calls `BuildStringParameter(fhirSp.Code, SanitizeDescription(fhirSp.Description), ...)`
+  (`Number` gets its own builder, nothing else does) — HL7's raw description
+  text, sanitized for formatting, not re-derived. No `Binding`, no `prefix`,
+  no per-code enum anywhere in the OpenAPI target. This item stands as drafted.
+- **`supportedProfile` → multiple shapes per resource — genuinely unaddressed
+  in the OpenAPI target specifically**, though the picture is more layered
+  than "missing": `ServerConnector.cs` resolves every canonical in
+  `resource.SupportedProfile` into the definitions pool (fetches each as a
+  StructureDefinition), and `OpenApiOptions.ExpandProfiles` exists as a real,
+  documented `--expand-profiles` CLI flag (default `true`) — but `.ExpandProfiles`
+  is never read anywhere in the C# source (zero field-access hits), and there
+  is no `oneOf`, no per-profile schema variant, anywhere in the OpenAPI target.
+  So: the plumbing to _gather_ multiple profiles exists; nothing turns that
+  into multiple (or unioned) OpenAPI shapes. Worth stating precisely rather
+  than "they haven't thought about it" — they have, partially, and it looks
+  unfinished/in-flux (consistent with Gino's own "bit of a mess" framing),
+  not absent.
+- **`fixed[x]`/`pattern[x]` as `const`/`contains` — confirmed absent.** Zero
+  references to `.Fixed`, `.Pattern`, `"const"`, or `"contains"` in the
+  OpenAPI target. They don't attempt it at all, not even the narrow
+  directly-emitted case this tool handles. The `contains`-vs-`properties`
+  analysis is genuinely new information to offer, not a reminder.
+
 ### Environment notes
 
 - The GitHub MCP server here exposes only **read** tools for releases
