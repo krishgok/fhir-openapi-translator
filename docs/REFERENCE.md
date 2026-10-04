@@ -271,7 +271,7 @@ combine: passing both emits only parameters that satisfy each.
 **Not intended for — do not use this as**
 
 - **A FHIR validator.** Passing schema validation does _not_ make a resource FHIR-conformant: FHIRPath invariants, terminology bindings, and profile constraints (slicing, must-support, cardinality refinements) are not fully represented in OpenAPI. Validate with a real FHIR validator (HAPI, the official validator, server-side `$validate`).
-- **A full profile / conformance engine.** `--profile` applies the _representable_ profile constraints (see the table below), but slicing, extension slices, `pattern[x]`, FHIRPath invariants, and must-support are **not enforced** — they are surfaced as description notes and `x-fhir-constraints-omitted`, not as schema rules.
+- **A full profile / conformance engine.** `--profile` applies the _representable_ profile constraints (see the table below), but slicing, extension slices, `pattern[x]`, FHIRPath invariants, and must-support are **not enforced** — they are surfaced as description notes and `x-fhir-constraints-omitted`, not as schema rules. Concretely, on US Core Blood Pressure's 94 elements: 23 become `required`, 3 required bindings become enums, and 3 choice-type narrowings are applied — the other 84 `constraint` (invariant), 44 slice-member, 31 `mustSupport`, 16 extensible-binding, 6 `fixed[x]` and 3 `pattern[x]` declarations have no OpenAPI representation at all. "IG-aware cardinality and enums" is a more honest name for this feature than "profile support," and that's what it's called in the README.
 - **A replacement for a full FHIR SDK.** HAPI FHIR and Firely offer richer, spec-aware models and conformance tooling than any OpenAPI codegen can; where you need that depth, use them alongside this rather than instead of it.
 - **XML payload handling.** Only the FHIR JSON representation is modeled.
 
@@ -298,6 +298,15 @@ of `CodeableConcept` cannot be written into the shared `CodeableConcept`
 schema. Such fixed values are therefore **not** represented — US Core Blood
 Pressure, for example, declares six and none appear as `const`. Only fixed
 values on elements the profile emits as their own property are applied.
+
+An `allOf` intersection narrowing the `$ref` does not rescue this. A fixed code
+must match **both** `code` and `system`, and `CodeableConcept.coding` is an
+array that may carry translations, so the constraint is "some coding matches on
+both fields" — `contains`, not `properties`. `contains` requires JSON Schema
+draft-6 or later, so OpenAPI 3.0.3 cannot express it at all, and code
+generators ignore it because it carries no type information. If you need these
+constraints enforced, validate with a real FHIR validator rather than expecting
+the schema to carry them.
 
 The IG package is a local `.tgz` / unpacked directory, or a `name@version` coordinate fetched from `packages.fhir.org` and cached under `~/.fhir-oas/packages`. Profiles must ship a snapshot (differential-only packages error); the package FHIR version must match `--fhir-version`; only the public registry is supported (no auth).
 

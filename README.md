@@ -77,19 +77,22 @@ const doc = generateOpenApi({ resources: ["Patient"], fhirVersion: "r4" });
 - **Minimal output** — only the resources you ask for and what they reference.
 - **Typed code enums** from required ValueSet bindings, not bare strings.
 - **Custom operations** from the official OperationDefinitions.
-- **Profiles / IGs** — apply US Core-style constraints from any IG package.
+- **IG-aware cardinality and enums** — required fields, choice narrowing and
+  enum bindings pulled from a profile's snapshot; most of what a profile
+  declares (`mustSupport`, invariants, slicing) has no OpenAPI representation.
 - **CapabilityStatement-driven** — generate exactly what a server supports.
 - **Search parameters, documented and tunable** — accepted codes and comparison prefixes per FHIR version; emit only the ones your deployment indexes.
 - **Merge mode & drift guard** — coexist with hand-written specs, catch drift in CI.
 
 ## Where it fits
 
-|                                   | fhir-openapi-translator  |     HAPI / Firely      |
-| --------------------------------- | :----------------------: | :--------------------: |
-| Output                            | OpenAPI (→ any language) |   Java / .NET models   |
-| Runtime needed                    |    none (offline CLI)    | a running server / SDK |
-| US Core / IG profiles             |            ✅            |           ✅           |
-| Per-resource, codegen-tuned specs |            ✅            |           —            |
+|                                                               | fhir-openapi-translator  |     HAPI / Firely      |
+| ------------------------------------------------------------- | :----------------------: | :--------------------: |
+| Output                                                        | OpenAPI (→ any language) |   Java / .NET models   |
+| Runtime needed                                                |    none (offline CLI)    | a running server / SDK |
+| IG-aware cardinality & enums                                  |            ✅            |           ✅           |
+| Full profile conformance (`mustSupport`, invariants, slicing) |            —             |           ✅           |
+| Per-resource, codegen-tuned specs                             |            ✅            |           —            |
 
 **Complements a FHIR SDK, doesn't replace it.** Keep HAPI or Firely for server-side models and conformance — this produces the OpenAPI contract around them: for consumers in any language, and for the tooling you already run (gateways, mock servers, contract tests).
 

@@ -4,6 +4,30 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Profiles that slice an element emitted it with the wrong cardinality. A
+  sliced element appears several times in a snapshot under one `path` — the
+  slicing root (`Observation.component`, max `*`), then each named slice
+  (`Observation.component:systolic`, max `1`) and that slice's children, which
+  reuse the root's paths. Keyed by path, the last entry won, so the slices
+  overwrote their own root: US Core Blood Pressure emitted `component` as a
+  single object rather than an array. Slice entries are now dropped (they are
+  identified by a `:` in the element `id`), leaving the unsliced shape the
+  slicing root describes. Reported on chat.fhir.org.
+
+### Changed
+
+- Renamed the "Profiles / IGs" feature to "IG-aware cardinality and enums" in
+  the README and comparison table, and added the HL7 census that prompted it:
+  of a real profile's 94 elements (US Core Blood Pressure), this tool
+  represents 23 as `required`, 3 as enums and 3 as choice narrowings. The
+  other 84 `constraint`, 44 slice-member, 31 `mustSupport`, 16
+  extensible-binding, 6 `fixed[x]` and 3 `pattern[x]` declarations have no
+  OpenAPI representation. Raised by Grahame Grieve on chat.fhir.org.
+
 ## [0.2.0] - 2026-09-17
 
 Search parameters gain derived metadata and a way to emit fewer of them.

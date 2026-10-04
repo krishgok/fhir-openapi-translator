@@ -17,6 +17,7 @@ const MAX_ENUM_CODES = 150;
 
 interface RawElement {
   path: string;
+  id?: string;
   min?: number;
   max?: string;
   short?: string;
@@ -33,6 +34,26 @@ interface RawElement {
 interface RawExtension {
   url: string;
   valueUrl?: string;
+}
+
+/**
+ * Drops named slices and everything beneath them.
+ *
+ * A sliced element appears several times in a snapshot under one `path`: the
+ * slicing root (`Observation.component`, max `*`) followed by each named slice
+ * (`Observation.component:systolic`, max `1`) and that slice's own children,
+ * which reuse the root's paths. Keyed by path, the last entry wins, so the
+ * slices silently overwrote their own root — US Core Blood Pressure turned
+ * `component` from an array into a single object.
+ *
+ * Only the `id` distinguishes them, by a `:` segment. Slice constraints are not
+ * enforced anyway (they are reported via `omittedConstraints`), so dropping the
+ * slice entries leaves the unsliced shape the root describes — which is also
+ * the honest one: FHIR slicing is open unless closed, so a schema that admits
+ * any conforming element is correct where an enumerated one would not be.
+ */
+function isNotSliceMember(el: RawElement): boolean {
+  return !(el.id ?? "").includes(":");
 }
 
 export interface RawStructureDefinition {
@@ -109,7 +130,9 @@ export function minimizeStructureDefinition(
     type: sd.type,
     abstract: !!sd.abstract,
     baseDefinition: sd.baseDefinition,
-    elements: (sd.snapshot?.element ?? []).map((el) => minimizeElement(el, resolveValueSet)),
+    elements: (sd.snapshot?.element ?? [])
+      .filter(isNotSliceMember)
+      .map((el) => minimizeElement(el, resolveValueSet)),
   };
 }
 

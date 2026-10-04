@@ -104,6 +104,66 @@ describe("profile application (US Core Patient fixture)", () => {
   });
 });
 
+describe("profile slicing does not corrupt cardinality", () => {
+  // A sliced element appears several times under one path: the slicing root
+  // (Observation.component, max *) then each named slice (…:systolic, max 1)
+  // and that slice's children, which reuse the root's paths. Keyed by path the
+  // last entry won, so slices overwrote their own root and US Core Blood
+  // Pressure emitted `component` as a single object instead of an array.
+  it("keeps a sliced element an array", () => {
+    const doc = generateOpenApi({
+      resources: ["Observation"],
+      fhirVersion: "r4",
+      ig: IG_DIR,
+      profiles: ["us-core-blood-pressure"],
+    }) as any;
+    const name = Object.keys(doc.components.schemas).find(
+      (n) => doc.components.schemas[n]["x-fhir-profile"],
+    )!;
+    const component = doc.components.schemas[name].properties.component;
+    expect(component.type, "sliced component must stay an array").toBe("array");
+    expect(component.items?.$ref).toBeDefined();
+  });
+
+  // The general rule, checked against the definitions rather than by hand: a
+  // profile may only turn a base array into a scalar when its own unsliced
+  // element says so (US Core does narrow Device.udiCarrier to 0..1).
+  it("only narrows cardinality where the profile's own element narrows it", () => {
+    const ig = loadIgSync(IG_DIR);
+    const problems: string[] = [];
+
+    for (const profile of ig.profiles) {
+      const base = (generateOpenApi({ resources: [profile.type], fhirVersion: "r4" }) as any)
+        .components.schemas[profile.type];
+      const doc = generateOpenApi({
+        resources: [profile.type],
+        fhirVersion: "r4",
+        ig: IG_DIR,
+        profiles: [profile.id ?? profile.name],
+      }) as any;
+      const name = Object.keys(doc.components.schemas).find(
+        (n) => doc.components.schemas[n]["x-fhir-profile"] === profile.url,
+      )!;
+      const emitted = doc.components.schemas[name];
+
+      for (const [property, baseSchema] of Object.entries<any>(base.properties)) {
+        const profiled = emitted.properties[property];
+        if (!profiled) continue;
+        if ((baseSchema.type === "array") === (profiled.type === "array")) continue;
+
+        // Divergence is only legitimate if the profile's own element says max 1.
+        const element = (profile as any).definition?.elements?.find(
+          (el: any) => el.path === `${profile.type}.${property}`,
+        );
+        if (element?.max !== "1") {
+          problems.push(`${profile.id}.${property}: base array, profile scalar, max=${element?.max}`);
+        }
+      }
+    }
+    expect(problems).toEqual([]);
+  });
+});
+
 describe("IG loading", () => {
   let tarball: string;
   let tmpDir: string;
