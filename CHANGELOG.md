@@ -18,6 +18,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   identified by a `:` in the element `id`), leaving the unsliced shape the
   slicing root describes. Reported on chat.fhir.org.
 
+### Changed
+
+- Renamed the "Profiles / IGs" feature to "IG-aware cardinality and enums" in
+  the README and comparison table, and added the HL7 census that prompted it:
+  of a real profile's 94 elements (US Core Blood Pressure), this tool
+  represents 23 as `required`, 3 as enums and 3 as choice narrowings. The
+  other 84 `constraint`, 44 slice-member, 31 `mustSupport`, 16
+  extensible-binding, 6 `fixed[x]` and 3 `pattern[x]` declarations have no
+  OpenAPI representation. Raised by Grahame Grieve on chat.fhir.org.
+
 ## [0.2.0] - 2026-09-17
 
 Search parameters gain derived metadata and a way to emit fewer of them.

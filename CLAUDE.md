@@ -70,6 +70,8 @@ a release.
   What this tool represents is 23 cardinality constraints, 3 required-binding
   enums and 3 choice narrowings. That ratio is the honest description of
   "profile support" and should be stated wherever the feature is described.
+  **Done**: README renamed the feature to "IG-aware cardinality and enums"
+  and REFERENCE carries the full count; both link back to this thread.
 
 - **"No system-level id" — the actual FHIR distinction (my first guess was
   wrong).** Asked in reply why a profile has no stable identity to key a
